@@ -1,0 +1,41 @@
+{
+  "name": "j4u-lineup",
+  "version": "0.1.0",
+  "description": "J4U 찬양팀 라인업 관리",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mjlee9556-ai/w4u_lineup_system.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mjlee9556-ai/w4u_lineup_system/issues"
+  },
+  "homepage": "https://github.com/mjlee9556-ai/w4u_lineup_system#readme",
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.118.0",
+    "next": "^15.5.28",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.7",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.28",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "private": true
+}
