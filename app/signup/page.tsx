@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentMember } from "@/lib/auth";
 import { SESSION_LABELS, SIGNUP_SESSIONS } from "@/lib/sessions";
-import { DISTRICTS, DONG_PATTERN } from "@/lib/regions";
 import { PIN_PATTERN } from "@/lib/pin";
 import Link from "next/link";
 import { Notice } from "@/components/Notice";
@@ -66,21 +65,10 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
           </div>
         </div>
 
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="label" htmlFor="district">거주 구</label>
-            <select id="district" name="district" required defaultValue="" className="input">
-              <option value="" disabled>선택</option>
-              {DISTRICTS.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label" htmlFor="dong">동</label>
-            <input id="dong" name="dong" required placeholder="예: 서빙고동" pattern={DONG_PATTERN} maxLength={11} className="input" />
-          </div>
+        <div>
+          <label className="label" htmlFor="address">거주지 (시·구·동까지)</label>
+          <input id="address" name="address" required maxLength={40} placeholder="예: 수원시 장안구 조원동" className="input" />
+          <p className="mt-1 text-xs text-stone-500">번지나 아파트 이름 같은 상세 주소는 적지 않아요.</p>
         </div>
 
         <div>
@@ -91,7 +79,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
         <label className="flex gap-2 rounded-lg bg-stone-100 p-3 text-xs leading-relaxed text-stone-700">
           <input type="checkbox" name="privacy" required className="mt-0.5" />
           <span>
-            라인업 편성과 연락을 위해 이름, 세션, 생년월일, 전화번호, 이메일(선택), 거주지(구·동)를 수집합니다.
+            라인업 편성과 연락을 위해 이름, 세션, 생년월일, 전화번호, 이메일(선택), 거주지(시·구·동)를 수집합니다.
             연락처와 생년월일은 본인과 관리자만 볼 수 있고, 다른 팀원에게는 이름과 세션만 보입니다.
             탈퇴하거나 활동을 마치면 삭제합니다. 이에 동의합니다.
           </span>

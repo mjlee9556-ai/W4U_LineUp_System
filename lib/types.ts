@@ -12,7 +12,7 @@ export type Member = {
   birth_date: string | null;
   phone: string;
   email: string | null;
-  district: string | null;
+  district: string | null; // 거주지 (예: 수원시 장안구 조원동). 예전 가입자는 구만 들어 있다
   dong: string | null;
   role: MemberRole;
   status: MemberStatus;
@@ -66,6 +66,11 @@ export type Assignment = {
 
 export type SessionRule = { session: Session; min: number; max: number | null };
 
+/** 거주지 표시용. 예전 가입자는 구·동이 나뉘어 저장돼 있다 */
+export function formatAddress(m: Pick<Member, "district" | "dong">): string {
+  return [m.district, m.dong].filter(Boolean).join(" ");
+}
+
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   weekend: "주일",
   retreat: "수련회",
@@ -83,6 +88,11 @@ export const SPECIAL_STATUS_OPTIONS: { value: AvailabilityStatus; label: string 
   { value: "none", label: "불가" },
 ];
 
-export function statusOptionsFor(type: EventType) {
-  return type === "weekend" ? WEEKEND_STATUS_OPTIONS : SPECIAL_STATUS_OPTIONS;
+/** 토 연습이 있는 주일만 토·일을 나눠 묻고, 연습 없는 주일과 비주말 일정은 가능/불가로 받는다 */
+export function hasSaturdayPractice(event: LineupEvent): boolean {
+  return event.type === "weekend" && (event.event_days ?? []).some((d) => d.kind === "practice");
+}
+
+export function statusOptionsFor(event: LineupEvent) {
+  return hasSaturdayPractice(event) ? WEEKEND_STATUS_OPTIONS : SPECIAL_STATUS_OPTIONS;
 }

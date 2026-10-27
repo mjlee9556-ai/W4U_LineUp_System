@@ -119,6 +119,40 @@ export async function setRoundStatus(formData: FormData) {
   revalidatePath(`/admin/rounds/${id}`);
 }
 
+/** 주일 세트의 토요일 연습을 없애거나 되살린다 (라인업 확정 전만) */
+export async function toggleSaturdayPractice(formData: FormData) {
+  await requireAdmin();
+  const eventId = String(formData.get("event_id"));
+
+  const roundId = await transaction(async (tx) => {
+    const { rows } = await tx.query<{ round_id: string; start_date: string; has_practice: boolean }>(
+      `select round_id, start_date,
+              exists(select 1 from event_days d where d.event_id = e.id and d.kind = 'practice') as has_practice
+         from events e where id = $1 and type = 'weekend' and lineup_status = 'draft'`,
+      [eventId],
+    );
+    const event = rows[0];
+    if (!event) return null;
+
+    if (event.has_practice) {
+      await tx.query(`delete from event_days where event_id = $1 and kind = 'practice'`, [eventId]);
+      // 이미 낸 응답은 연습 없는 주에 맞게 '가능'으로 바꾼다
+      await tx.query(
+        `update availabilities set status = 'available' where event_id = $1 and status in ('both', 'sun_only')`,
+        [eventId],
+      );
+    } else {
+      // 토요일 연습을 되살리면 '가능'으로 냈던 사람은 토·일 중 다시 골라야 한다 (화면에서 선택이 비어 보인다)
+      await tx.query(`insert into event_days (event_id, date, kind) values ($1, $2, 'practice')`, [eventId, event.start_date]);
+    }
+    return event.round_id;
+  });
+
+  if (roundId) revalidatePath(`/admin/rounds/${roundId}`);
+  revalidatePath("/availability");
+  revalidatePath("/calendar");
+}
+
 /** 수련회·특별예배: 월 수집과 별개 일정. 기간의 매일을 섬김일로 만든다 */
 export async function createSpecialEvent(formData: FormData) {
   await requireAdmin();
