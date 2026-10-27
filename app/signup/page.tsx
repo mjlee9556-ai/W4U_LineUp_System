@@ -2,18 +2,16 @@ import { redirect } from "next/navigation";
 import { getCurrentMember } from "@/lib/auth";
 import { SESSION_LABELS, SIGNUP_SESSIONS } from "@/lib/sessions";
 import { DISTRICTS, DONG_PATTERN } from "@/lib/regions";
+import { PIN_PATTERN } from "@/lib/pin";
+import Link from "next/link";
 import { Notice } from "@/components/Notice";
 import { SubmitButton } from "@/components/SubmitButton";
 import { register } from "./actions";
 
 export default async function SignupPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { user, member } = await getCurrentMember();
-  if (!user) redirect("/login");
+  const { member } = await getCurrentMember();
   if (member) redirect(member.status === "approved" ? "/calendar" : "/pending");
   const { error } = await searchParams;
-
-  const meta = user.user_metadata ?? {};
-  const defaultName = String(meta.name ?? meta.full_name ?? meta.preferred_username ?? "");
 
   return (
     <div className="mx-auto max-w-md px-4 py-8">
@@ -26,7 +24,23 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
       <form action={register} className="space-y-5">
         <div>
           <label className="label" htmlFor="name">이름</label>
-          <input id="name" name="name" required defaultValue={defaultName} className="input" />
+          <input id="name" name="name" required className="input" />
+        </div>
+
+        <div>
+          <label className="label" htmlFor="phone">전화번호 (로그인 아이디)</label>
+          <input id="phone" name="phone" type="tel" inputMode="numeric" required autoComplete="tel" placeholder="010-0000-0000" className="input" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label" htmlFor="pin">PIN 정하기</label>
+            <input id="pin" name="pin" type="password" inputMode="numeric" required pattern={PIN_PATTERN} placeholder="숫자 4~6자리" autoComplete="new-password" className="input" />
+          </div>
+          <div>
+            <label className="label" htmlFor="pin_confirm">PIN 확인</label>
+            <input id="pin_confirm" name="pin_confirm" type="password" inputMode="numeric" required pattern={PIN_PATTERN} autoComplete="new-password" className="input" />
+          </div>
         </div>
 
         <fieldset>
@@ -47,15 +61,11 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
             <input id="birth_date" name="birth_date" type="date" required className="input" />
           </div>
           <div>
-            <label className="label" htmlFor="phone">전화번호</label>
-            <input id="phone" name="phone" type="tel" required placeholder="010-0000-0000" pattern="01[0-9]-?[0-9]{3,4}-?[0-9]{4}" className="input" />
+            <label className="label" htmlFor="email">이메일 (선택)</label>
+            <input id="email" name="email" type="email" className="input" />
           </div>
         </div>
 
-        <div>
-          <label className="label" htmlFor="email">이메일</label>
-          <input id="email" name="email" type="email" required defaultValue={user.email ?? ""} className="input" />
-        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -81,7 +91,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
         <label className="flex gap-2 rounded-lg bg-stone-100 p-3 text-xs leading-relaxed text-stone-700">
           <input type="checkbox" name="privacy" required className="mt-0.5" />
           <span>
-            라인업 편성과 연락을 위해 이름, 세션, 생년월일, 전화번호, 이메일, 거주지(구·동)를 수집합니다.
+            라인업 편성과 연락을 위해 이름, 세션, 생년월일, 전화번호, 이메일(선택), 거주지(구·동)를 수집합니다.
             연락처와 생년월일은 본인과 관리자만 볼 수 있고, 다른 팀원에게는 이름과 세션만 보입니다.
             탈퇴하거나 활동을 마치면 삭제합니다. 이에 동의합니다.
           </span>
@@ -89,6 +99,9 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
 
         <SubmitButton className="btn-primary w-full py-3" pendingText="가입 중…">가입하기</SubmitButton>
       </form>
+      <p className="mt-6 text-center text-sm text-stone-600">
+        이미 가입했나요? <Link href="/login" className="font-medium underline">로그인</Link>
+      </p>
     </div>
   );
 }

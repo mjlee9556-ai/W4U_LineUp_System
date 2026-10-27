@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
-import { formatMonth, formatShort, shiftMonth, todayKST } from "@/lib/dates";
+import { query } from "@/lib/db";
+import { addDays, formatMonth, formatShort, shiftMonth, todayKST } from "@/lib/dates";
 import { SESSION_LABELS, type Session } from "@/lib/sessions";
 import { EVENT_TYPE_LABELS, type LineupEvent, type Member, type Round } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
@@ -11,21 +12,26 @@ import { createInviteCode, createRound, createSpecialEvent, deleteInviteCode, se
 const ERRORS: Record<string, string> = {
   month: "월을 다시 골라 주세요.",
   round: "회차를 만들지 못했어요. 같은 달 회차가 이미 있는지 확인해 주세요.",
+  closes: "마감일은 오늘 이후로 골라 주세요.",
   event: "일정 정보를 다시 확인해 주세요.",
 };
 
 type InviteCode = { code: string; expires_at: string | null; max_uses: number | null; used_count: number };
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { supabase, member } = await requireAdmin();
+  const { member } = await requireAdmin();
   const { error } = await searchParams;
 
-  const [{ data: pending }, { data: codes }, { data: rounds }, { data: specials }, { count: approvedCount }] = await Promise.all([
-    supabase.from("members").select("*, member_sessions(session)").eq("status", "pending").order("created_at"),
-    supabase.from("invite_codes").select("*").order("created_at", { ascending: false }),
-    supabase.from("availability_rounds").select("*").order("target_month", { ascending: false }).limit(6),
-    supabase.from("events").select("*").is("round_id", null).gte("end_date", todayKST()).order("start_date"),
-    supabase.from("members").select("id", { count: "exact", head: true }).eq("status", "approved"),
+  const [pending, codes, rounds, specials, [{ count: approvedCount }]] = await Promise.all([
+    query<Member & { sessions: Session[] }>(
+      `select m.id, m.name, m.district, m.dong, m.created_at,
+              coalesce(array(select session from member_sessions s where s.member_id = m.id), '{}') as sessions
+         from members m where m.status = 'pending' order by m.created_at`,
+    ),
+    query<InviteCode>(`select * from invite_codes order by created_at desc`),
+    query<Round>(`select * from availability_rounds order by target_month desc limit 6`),
+    query<LineupEvent>(`select * from events where round_id is null and end_date >= $1 order by start_date`, [todayKST()]),
+    query<{ count: number }>(`select count(*)::int as count from members where status = 'approved'`),
   ]);
 
   const nextMonth = shiftMonth(todayKST().slice(0, 7), 1);
@@ -33,7 +39,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   return (
     <AppShell member={member}>
       <h1 className="text-xl font-bold">관리</h1>
-      <p className="mt-1 text-sm text-stone-600">승인된 팀원 {approvedCount ?? 0}명</p>
+      <p className="mt-1 text-sm text-stone-600">
+        승인된 팀원 {approvedCount}명 · <Link href="/admin/members" className="underline">팀원 관리 (PIN 초기화·관리자 지정)</Link>
+      </p>
       <div className="mt-4">
         <Notice tone="error" message={error ? ERRORS[error] : undefined} />
       </div>
@@ -48,13 +56,13 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             </div>
             <div>
               <label className="label" htmlFor="closes_on">마감일</label>
-              <input id="closes_on" name="closes_on" type="date" defaultValue={`${todayKST().slice(0, 7)}-25`} className="input" />
+              <input id="closes_on" name="closes_on" type="date" defaultValue={defaultClosesOn(todayKST())} className="input" />
             </div>
             <SubmitButton pendingText="여는 중…">회차 열기</SubmitButton>
           </form>
           <p className="mt-2 text-xs text-stone-500">그 달의 일요일마다 토 연습 + 일 예배 세트가 자동으로 생겨요.</p>
           <ul className="mt-3 divide-y divide-stone-100 text-sm">
-            {((rounds ?? []) as Round[]).map((r) => (
+            {rounds.map((r) => (
               <li key={r.id} className="flex items-center justify-between py-2">
                 <Link href={`/admin/rounds/${r.id}`} className="underline-offset-2 hover:underline">
                   {formatMonth(r.target_month.slice(0, 7))}
@@ -82,7 +90,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             <SubmitButton className="btn-primary col-span-2" pendingText="추가 중…">일정 추가</SubmitButton>
           </form>
           <ul className="mt-3 divide-y divide-stone-100 text-sm">
-            {((specials ?? []) as LineupEvent[]).map((e) => (
+            {specials.map((e) => (
               <li key={e.id} className="flex items-center justify-between py-2">
                 <Link href={`/admin/events/${e.id}`} className="hover:underline">
                   {e.title} <span className="text-xs text-stone-500">{EVENT_TYPE_LABELS[e.type]}</span>
@@ -97,15 +105,15 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </section>
 
         <section className="card">
-          <h2 className="font-semibold">가입 승인 대기 {pending?.length ? `(${pending.length})` : ""}</h2>
-          {!pending?.length && <p className="mt-2 text-sm text-stone-500">대기 중인 사람이 없어요.</p>}
+          <h2 className="font-semibold">가입 승인 대기 {pending.length ? `(${pending.length})` : ""}</h2>
+          {!pending.length && <p className="mt-2 text-sm text-stone-500">대기 중인 사람이 없어요.</p>}
           <ul className="mt-2 divide-y divide-stone-100">
-            {((pending ?? []) as (Member & { member_sessions: { session: Session }[] })[]).map((m) => (
+            {pending.map((m) => (
               <li key={m.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                 <div>
                   <div className="font-medium">{m.name}</div>
                   <div className="text-xs text-stone-500">
-                    {m.member_sessions.map((s) => SESSION_LABELS[s.session]).join(", ")} · {m.district} {m.dong}
+                    {m.sessions.map((s) => SESSION_LABELS[s]).join(", ")} · {m.district} {m.dong}
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -139,7 +147,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             <SubmitButton pendingText="만드는 중…">코드 만들기</SubmitButton>
           </form>
           <ul className="mt-3 divide-y divide-stone-100 text-sm">
-            {((codes ?? []) as InviteCode[]).map((c) => (
+            {codes.map((c) => (
               <li key={c.code} className="flex items-center justify-between py-2">
                 <span className="font-mono">{c.code}</span>
                 <span className="flex items-center gap-2 text-xs text-stone-500">
@@ -157,4 +165,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </div>
     </AppShell>
   );
+}
+
+// 보통 25일 마감, 이미 지났으면 사흘 뒤
+function defaultClosesOn(today: string) {
+  const usual = `${today.slice(0, 7)}-25`;
+  return today < usual ? usual : addDays(today, 3);
 }

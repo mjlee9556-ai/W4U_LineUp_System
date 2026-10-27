@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { endSession } from "@/lib/auth";
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  await endSession();
   return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
 }

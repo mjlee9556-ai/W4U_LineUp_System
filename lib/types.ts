@@ -8,10 +8,9 @@ export type AvailabilityStatus = "both" | "sun_only" | "available" | "none";
 
 export type Member = {
   id: string;
-  kakao_id: string | null;
   name: string;
   birth_date: string | null;
-  phone: string | null;
+  phone: string;
   email: string | null;
   district: string | null;
   dong: string | null;

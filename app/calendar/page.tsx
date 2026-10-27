@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireMember } from "@/lib/auth";
+import { query } from "@/lib/db";
 import { getEventsBetween, getMemberNames } from "@/lib/queries";
 import { calendarGrid, formatMonth, formatShort, isValidMonth, parseISODate, shiftMonth, todayKST, WEEKDAYS } from "@/lib/dates";
 import { buildLineup, groupBySession, practiceDates, serviceDates, type LineupEntry } from "@/lib/lineup";
@@ -12,20 +13,20 @@ type DayItem =
   | { kind: "practice"; event: LineupEvent };
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
-  const { supabase, member } = await requireMember();
+  const { member } = await requireMember();
   const params = await searchParams;
   const today = todayKST();
   const month = isValidMonth(params.month) ? params.month : today.slice(0, 7);
 
   const grid = calendarGrid(month);
-  const events = await getEventsBetween(supabase, grid[0].date, grid.at(-1)!.date);
+  const events = await getEventsBetween(grid[0].date, grid.at(-1)!.date);
   const confirmed = events.filter((e) => e.lineup_status === "confirmed");
 
-  const { data: assignmentRows } = confirmed.length
-    ? await supabase.from("lineup_assignments").select("*").in("event_id", confirmed.map((e) => e.id))
-    : { data: [] };
-  const assignments = (assignmentRows ?? []) as Assignment[];
-  const names = await getMemberNames(supabase, assignments.map((a) => a.member_id));
+  // 확정된 일정의 배정만 공개
+  const assignments = await query<Assignment>(`select * from lineup_assignments where event_id = any($1::uuid[])`, [
+    confirmed.map((e) => e.id),
+  ]);
+  const names = await getMemberNames(assignments.map((a) => a.member_id));
 
   const lineupByEvent = new Map<string, LineupEntry[]>();
   for (const e of confirmed) {
@@ -109,7 +110,7 @@ function CalendarCell({ event, lineup, myId }: { event: LineupEvent; lineup: Lin
     <div className="mt-0.5">
       {label && <div className="truncate rounded bg-violet-100 px-1 text-[10px] text-violet-800">{label}</div>}
       {/* 좁은 화면에서는 확정 표시만, 넓은 화면에서는 세션별 이름 */}
-      <div className="truncate rounded bg-emerald-100 px-1 text-[10px] text-emerald-800 md:hidden">확정 {lineup.length}명</div>
+      <div className="rounded bg-emerald-100 px-1 text-center text-[10px] text-emerald-800 md:hidden">확정</div>
       <ul className="hidden space-y-px text-[11px] leading-tight md:block">
         {groupBySession(lineup).map((g) => (
           <li key={g.session} className="truncate">

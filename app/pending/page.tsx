@@ -4,9 +4,8 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { redeemInvite } from "./actions";
 
 export default async function PendingPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { user, member } = await getCurrentMember();
-  if (!user) redirect("/login");
-  if (!member) redirect("/signup");
+  const { member } = await getCurrentMember();
+  if (!member) redirect("/login");
   if (member.status === "approved") redirect("/calendar");
   const { error } = await searchParams;
 

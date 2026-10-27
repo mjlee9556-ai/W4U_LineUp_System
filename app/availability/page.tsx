@@ -1,4 +1,5 @@
 import { requireMember } from "@/lib/auth";
+import { query } from "@/lib/db";
 import { getOpenEvents } from "@/lib/queries";
 import { formatMonth, formatShort } from "@/lib/dates";
 import { SESSION_LABELS, SESSIONS, type Session } from "@/lib/sessions";
@@ -18,18 +19,15 @@ export default async function AvailabilityPage({
 }: {
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
-  const { supabase, member, sessions: mySessions } = await requireMember();
+  const { member, sessions: mySessions } = await requireMember();
   const { saved, error } = await searchParams;
-  const { rounds, events } = await getOpenEvents(supabase);
+  const { rounds, events } = await getOpenEvents();
 
-  const { data: answers } = events.length
-    ? await supabase
-        .from("availabilities")
-        .select("*")
-        .eq("member_id", member.id)
-        .in("event_id", events.map((e) => e.id))
-    : { data: [] };
-  const answerByEvent = new Map((answers as Availability[]).map((a) => [a.event_id, a]));
+  const answers = await query<Availability>(
+    `select * from availabilities where member_id = $1 and event_id = any($2::uuid[])`,
+    [member.id, events.map((e) => e.id)],
+  );
+  const answerByEvent = new Map(answers.map((a) => [a.event_id, a]));
 
   // 기본 세션이 아닌 것도 추가로 고를 수 있게 전체 목록을 보여준다(서브 인도자 제외)
   const selectable = SESSIONS.filter((s) => s !== "sub_leader");

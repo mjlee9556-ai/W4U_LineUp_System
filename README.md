@@ -1,85 +1,67 @@
 # W4U_LineUp_System
 
-J4U 찬양팀 라인업 관리 웹앱입니다. 팀원은 카카오로 로그인해 매달 가능일자를 내고, 관리자가 라인업을 확정하면 모두가 캘린더에서 날짜별로 누가 어느 세션인지 볼 수 있습니다.
+J4U 찬양팀 라인업 관리 웹앱입니다. 팀원은 **전화번호 + PIN**으로 가입·로그인해 매달 가능일자를 내고, 관리자가 라인업을 확정하면 모두가 캘린더에서 날짜별로 누가 어느 세션인지 볼 수 있습니다.
 
-- 화면: Next.js 15 (App Router) + Tailwind CSS 4
-- DB·로그인: Supabase (Postgres + Auth의 Kakao 연동, RLS로 권한 관리)
-- 배포: Vercel
+카카오·Supabase 같은 외부 서비스 설정이 필요 없습니다. 데이터베이스는 이렇게 고릅니다.
+
+- `DATABASE_URL`(또는 `POSTGRES_URL`) 환경 변수가 있으면 그 Postgres를 씁니다. Vercel Storage에서 만든 DB가 자동으로 이 값을 넣어 줍니다.
+- 없으면 앱 안에 들어 있는 Postgres(PGlite)를 `./data/pglite` 폴더에 저장해 씁니다. 따로 설치할 것이 없습니다.
+- 테이블은 앱이 처음 켜질 때 자동으로 만들어집니다.
 
 ## 화면
 
 | 경로 | 사용자 | 내용 |
 | --- | --- | --- |
-| `/login` | 모두 | 카카오로 시작하기 |
-| `/signup` | 처음 로그인한 사람 | 이름, 세션(복수), 생년월일, 전화, 이메일, 구·동, 개인정보 동의, 초대코드(선택) |
+| `/signup` | 누구나 | 이름, 전화번호(로그인 아이디), PIN(숫자 4~6자리), 세션(복수), 생년월일, 이메일(선택), 구·동, 개인정보 동의, 초대코드(선택) |
+| `/login` | 누구나 | 전화번호 + PIN. 5번 틀리면 10분 잠금 |
 | `/pending` | 승인 대기 | 승인 대기 안내, 나중에 초대코드 입력 |
 | `/availability` | 팀원 | 열린 회차의 주일마다 `토·일 가능 / 토 불가 / 불가`, 수련회·특별예배는 `가능 / 불가`. 세션은 기본 세션으로 채워지고 추가 가능, 메모 |
-| `/calendar` | 팀원 | 월 캘린더. 확정된 일정은 세션별 이름, 내 섬김 날짜는 강조. 아래에 날짜별 라인업 목록(토 불참 표시 포함) |
+| `/calendar` | 팀원 | 월 캘린더. 확정된 일정은 세션별 이름(모바일은 "확정" 표시), 내 섬김 날짜 강조. 아래에 날짜별 라인업 목록(토 불참 표시 포함) |
+| `/me` | 팀원 | 내 정보, PIN 바꾸기 |
 | `/admin` | 관리자 | 수집 회차 열기(주말 세트 자동 생성), 수련회·특별예배 추가, 가입 승인, 초대코드 |
+| `/admin/members` | 관리자 | 팀원 목록, PIN 초기화(임시 PIN 발급), 관리자 지정/해제, 비활성화 |
 | `/admin/rounds/[id]` | 관리자 | 주일 × 세션 가능 인원표(정원 부족은 빨간색), 미제출자, 수집 마감/다시 열기 |
 | `/admin/events/[id]` | 관리자 | 세션마다 가능자 중에서 선택, 정원 경고, 임시 저장 / 확정하고 공개 / 확정 풀기 |
 
-라인업은 **확정된 일정만** 팀원에게 보입니다(RLS). 편성 중인 일정은 캘린더에 "편성 중"으로만 나옵니다.
+- **맨 처음 가입한 사람이 자동으로 관리자**가 됩니다. 배포하자마자 본인이 먼저 가입하세요.
+- 그다음부터는 초대코드로 가입하면 바로 승인, 코드 없이 가입하면 관리자 승인을 기다립니다.
+- 라인업은 **확정된 일정만** 팀원에게 보입니다. 확정된 일정은 응답을 더 고칠 수 없습니다.
+- 다른 팀원에게는 이름과 세션만 보이고, 전화번호·생년월일은 관리자만 봅니다.
 
-## 처음 설정하기
+## 배포하기 (추천: Vercel + Vercel Storage)
 
-### 1. Supabase
+GitHub 계정만 있으면 클릭만으로 됩니다. 무료 요금제로 충분합니다.
 
-1. [supabase.com](https://supabase.com)에서 프로젝트를 만듭니다.
-2. SQL Editor에 `supabase/migrations/0001_init.sql` 내용을 붙여 넣고 실행합니다.
-3. Project Settings → API에서 URL과 anon key를 복사해 둡니다.
+1. [vercel.com](https://vercel.com)에 GitHub로 가입하고 **Add New → Project**에서 이 저장소를 **Import → Deploy** 합니다. (환경 변수는 넣지 않아도 됩니다)
+2. 만든 프로젝트의 **Storage** 탭 → **Create Database** → **Neon (Serverless Postgres)** → 무료 플랜으로 만들고 이 프로젝트에 **Connect** 합니다. `DATABASE_URL`이 자동으로 들어갑니다.
+3. **Deployments** 탭에서 가장 최근 배포의 **⋯ → Redeploy**를 누릅니다 (DB 연결을 반영하기 위해).
+4. 사이트 주소로 들어가 **본인이 제일 먼저 가입**합니다. 관리자가 됩니다.
+5. **관리 → 초대코드**에서 코드를 만들어 사이트 주소와 함께 단톡방에 공유합니다.
 
-### 2. 카카오 로그인
+## 다른 방법: 컴퓨터 한 대에서 실행
 
-1. [Kakao Developers](https://developers.kakao.com)에서 애플리케이션을 만듭니다.
-2. 앱 키의 **REST API 키**, 보안 메뉴의 **Client Secret**(코드 생성 후 활성화)을 복사합니다.
-3. 카카오 로그인을 활성화하고 Redirect URI에 `https://<프로젝트>.supabase.co/auth/v1/callback`을 넣습니다.
-4. 동의항목에서 닉네임·프로필 사진을 켭니다. 이메일(account_email)은 비즈 앱이 아니면 필수로 받을 수 없으니 선택 동의로 둡니다.
-5. Supabase → Authentication → Providers → Kakao를 켜고 REST API 키(Client ID)와 Client Secret을 넣습니다. 이메일을 선택 동의로 뒀다면 **Allow users without an email**도 켭니다.
-6. Supabase → Authentication → URL Configuration의 Redirect URLs에 `http://localhost:3000/auth/callback`과 배포 주소의 `/auth/callback`을 추가합니다.
-
-### 3. 로컬 실행
+항상 켜 둘 수 있는 컴퓨터(또는 서버)에 [Node.js](https://nodejs.org) 20 이상이 있으면 됩니다. 데이터는 `data/` 폴더에 저장되니 이 폴더를 백업하세요.
 
 ```bash
-cp .env.example .env.local   # URL과 anon key 입력
 npm install
-npm run dev
+npm run build
+npm start          # http://localhost:3000
 ```
 
-### 4. 첫 관리자 지정
-
-본인이 먼저 가입한 뒤 Supabase SQL Editor에서 실행합니다.
-
-```sql
-update public.members set role = 'admin', status = 'approved' where name = '본인 이름';
-```
-
-그 다음부터는 `/admin`에서 초대코드를 만들어 단톡방에 공유하거나 가입 신청을 승인하면 됩니다.
-
-### 5. 배포
-
-Vercel에서 이 저장소를 가져오고 환경 변수 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`를 넣습니다.
-
-## 한 달 흐름
-
-1. 20일경 관리자가 `/admin`에서 다음 달 회차를 열고 마감일을 정합니다. 그 달의 일요일마다 "토 연습 + 일 예배" 세트가 생깁니다.
-2. `/availability` 링크를 단톡방에 공유합니다. 팀원은 마감 전까지 언제든 고칠 수 있습니다.
-3. 마감 후 응답 현황에서 주일별로 편성 화면에 들어가 세션마다 사람을 고르고 **확정하고 공개**를 누릅니다. 토 불가로 응답한 사람은 자동으로 "토 불참"이 표시됩니다.
-4. 팀원은 `/calendar`에서 확정된 라인업을 봅니다.
-
-## 데이터 모델
-
-`supabase/migrations/0001_init.sql`에 있습니다. 주말 세트와 수련회·특별예배를 모두 `events` 하나로 다루고, 그 단위로 응답(`availabilities`)과 배정(`lineup_assignments`)을 저장합니다.
-
-- `members`: 연락처·생년월일은 본인과 관리자만 조회. 다른 팀원에게는 `member_directory` 뷰로 이름만 공개합니다(이 뷰는 의도적으로 RLS를 우회하므로 Supabase 린터가 경고를 띄웁니다).
-- 팀원이 자기 `role`/`status`를 바꾸지 못하도록 트리거로 막습니다. 가입은 `register_member()`, 나중 초대코드 입력은 `redeem_invite()` 함수로만 합니다.
-- 응답은 라인업이 확정되기 전, 회차가 열려 있고 마감 전일 때만 쓸 수 있습니다.
+팀원이 밖에서 접속하려면 그 컴퓨터를 인터넷에 열어야 해서, 보통은 위 Vercel 방법이 더 쉽습니다.
 
 ## 개발
 
 ```bash
+npm install
+npm run dev        # DATABASE_URL 없이 바로 실행 (./data/pglite)
 npm run typecheck
 npm run lint
-npm test         # 날짜·라인업 계산 단위 테스트
-npm run build
+npm test           # 날짜·라인업·PIN 단위 테스트
 ```
+
+`PGLITE_DIR=memory`로 실행하면 저장하지 않는 임시 DB를 씁니다.
+
+## 데이터 모델
+
+`lib/schema.ts`에 있습니다. 주말 세트와 수련회·특별예배를 모두 `events` 하나로 다루고, 그 단위로 응답(`availabilities`)과 배정(`lineup_assignments`)을 저장합니다. PIN은 scrypt 해시로만 저장하고, 로그인 세션은 `auth_sessions`에 토큰 해시로 저장합니다(60일).
