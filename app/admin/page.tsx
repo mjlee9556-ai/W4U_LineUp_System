@@ -18,9 +18,9 @@ const ERRORS: Record<string, string> = {
 
 type InviteCode = { code: string; expires_at: string | null; max_uses: number | null; used_count: number };
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ error?: string; deleted?: string }> }) {
   const { member } = await requireAdmin();
-  const { error } = await searchParams;
+  const { error, deleted } = await searchParams;
 
   const [pending, codes, rounds, specials, [{ count: approvedCount }]] = await Promise.all([
     query<Member & { sessions: Session[] }>(
@@ -43,6 +43,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         승인된 팀원 {approvedCount}명 · <Link href="/admin/members" className="underline">팀원 관리 (PIN 초기화·관리자 지정)</Link>
       </p>
       <div className="mt-4">
+        <Notice message={deleted === "round" ? "회차를 삭제했어요." : undefined} />
         <Notice tone="error" message={error ? ERRORS[error] : undefined} />
       </div>
 

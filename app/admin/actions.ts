@@ -119,6 +119,17 @@ export async function setRoundStatus(formData: FormData) {
   revalidatePath(`/admin/rounds/${id}`);
 }
 
+/** 회차를 지운다. 그 달 주일 세트와 응답·라인업도 함께 지워진다 (on delete cascade) */
+export async function deleteRound(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("round_id"));
+  await query(`delete from availability_rounds where id = $1`, [id]);
+  revalidatePath("/admin");
+  revalidatePath("/calendar");
+  revalidatePath("/availability");
+  redirect("/admin?deleted=round");
+}
+
 /** 주일 세트의 토요일 연습을 없애거나 되살린다 (라인업 확정 전만) */
 export async function toggleSaturdayPractice(formData: FormData) {
   await requireAdmin();
