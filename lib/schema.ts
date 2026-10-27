@@ -39,18 +39,6 @@ create table if not exists member_sessions (
   primary key (member_id, session)
 );
 
--- 일정당 세션 정원 기본값. max가 null이면 제한 없음
-create table if not exists session_rules (
-  session text primary key,
-  min int not null default 0,
-  max int
-);
-
-insert into session_rules (session, min, max) values
-  ('leader', 1, 1), ('sub_leader', 0, 1), ('vocal', 0, null), ('main_keys', 1, 1), ('second_keys', 1, 1),
-  ('bass', 1, 1), ('electric', 0, 1), ('acoustic', 0, 1), ('drums', 1, 1)
-on conflict do nothing;
-
 create table if not exists availability_rounds (
   id uuid primary key default gen_random_uuid(),
   target_month date not null unique,    -- 그 달 1일
@@ -101,4 +89,13 @@ create table if not exists lineup_assignments (
   sat_absent boolean not null default false,
   primary key (event_id, member_id, session)
 );
+
+-- 팀원이 아닌 사람(게스트)을 이름만으로 라인업에 넣는다
+create table if not exists lineup_guests (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references events (id) on delete cascade,
+  session text not null,
+  name text not null
+);
+create index if not exists lineup_guests_event_idx on lineup_guests (event_id);
 `;

@@ -4,13 +4,13 @@ import { requireAdmin } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
 import { withDays } from "@/lib/queries";
 import { formatShort } from "@/lib/dates";
-import { capacityWarnings } from "@/lib/lineup";
-import { SESSION_LABELS, SESSIONS, type Session } from "@/lib/sessions";
-import { EVENT_TYPE_LABELS, type Assignment, type Availability, type LineupEvent, type Member, type SessionRule } from "@/lib/types";
+import { SESSION_LABELS, SESSIONS } from "@/lib/sessions";
+import { EVENT_TYPE_LABELS, type Assignment, type Availability, type LineupEvent, type Guest, type Member } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { SubmitButton } from "@/components/SubmitButton";
-import { saveLineup, unconfirmLineup } from "../../actions";
+import { deleteEvent, saveLineup, unconfirmLineup } from "../../actions";
 
 const STATUS_LABEL = { both: "토·일", sun_only: "토 불가", available: "가능", none: "불가" } as const;
 
@@ -29,19 +29,14 @@ export default async function EventLineupPage({
   if (!found) notFound();
   const [event] = await withDays([found]);
 
-  const [answerRows, assignments, members, rules] = await Promise.all([
+  const [answerRows, assignments, members, guests] = await Promise.all([
     query<Availability>(`select * from availabilities where event_id = $1`, [id]),
     query<Assignment>(`select * from lineup_assignments where event_id = $1`, [id]),
     query<Pick<Member, "id" | "name">>(`select id, name from members where status = 'approved' order by name`),
-    query<SessionRule>(`select * from session_rules`),
+    query<Guest>(`select * from lineup_guests where event_id = $1 order by name`, [id]),
   ]);
   const answers = new Map(answerRows.map((a) => [a.member_id, a]));
   const assigned = new Set(assignments.map((a) => `${a.session}:${a.member_id}`));
-  const ruleBySession = new Map(rules.map((r) => [r.session, r]));
-
-  const counts: Partial<Record<Session, number>> = {};
-  for (const a of assignments) counts[a.session] = (counts[a.session] ?? 0) + 1;
-  const warnings = capacityWarnings(counts, rules);
 
   const available = members.filter((m) => {
     const a = answers.get(m.id);
@@ -80,18 +75,9 @@ export default async function EventLineupPage({
           </div>
         </div>
       ) : (
-        <>
-          {warnings.length > 0 && (
-            <ul className="mb-3 space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              {warnings.map((w) => (
-                <li key={w.session}>
-                  {SESSION_LABELS[w.session]}: {w.count}명 배정 (정원 {w.rule.min}
-                  {w.rule.max !== w.rule.min ? `~${w.rule.max ?? "∞"}` : ""}명)
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
+        <p className="text-sm text-stone-600">
+          세션마다 인원 제한은 없어요. 가능한 팀원이 없으면 &apos;게스트&apos; 칸에 이름을 적어 넣을 수 있어요.
+        </p>
       )}
 
       <form action={saveLineup} className="mt-3 space-y-3">
@@ -105,7 +91,8 @@ export default async function EventLineupPage({
             };
             const primary = available.filter(wants);
             const others = available.filter((m) => !wants(m));
-            const rule = ruleBySession.get(session);
+            const assignedCount = assignments.filter((a) => a.session === session).length;
+            const sessionGuests = guests.filter((g) => g.session === session).map((g) => g.name);
             const renderOption = (m: Pick<Member, "id" | "name">) => {
               const a = answers.get(m.id)!;
               return (
@@ -129,9 +116,9 @@ export default async function EventLineupPage({
               <section key={session} className="card">
                 <div className="flex items-baseline justify-between">
                   <h2 className="font-semibold">{SESSION_LABELS[session]}</h2>
-                  <span className="text-xs text-stone-500">
-                    정원 {rule ? `${rule.min}${rule.max !== rule.min ? `~${rule.max ?? "∞"}` : ""}` : "-"}명
-                  </span>
+                  {assignedCount + sessionGuests.length > 0 && (
+                    <span className="text-xs text-stone-500">{assignedCount + sessionGuests.length}명 저장됨</span>
+                  )}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {primary.length ? primary.map(renderOption) : <span className="text-sm text-stone-400">가능한 사람이 없어요</span>}
@@ -142,6 +129,14 @@ export default async function EventLineupPage({
                     <div className="mt-2 flex flex-wrap gap-2">{others.map(renderOption)}</div>
                   </details>
                 )}
+                <input
+                  name={`guests:${session}`}
+                  defaultValue={sessionGuests.join(", ")}
+                  placeholder="게스트 이름 (팀원이 아닌 경우, 여러 명은 쉼표로)"
+                  aria-label={`${SESSION_LABELS[session]} 게스트`}
+                  maxLength={100}
+                  className="input mt-3"
+                />
               </section>
             );
           })}
@@ -156,6 +151,23 @@ export default async function EventLineupPage({
           </div>
         )}
       </form>
+
+      {event.type !== "weekend" && (
+        <section className="card mt-6">
+          <h2 className="font-semibold">일정 삭제</h2>
+          <p className="mt-2 text-sm text-stone-600">이 일정의 응답과 라인업(게스트 포함)이 함께 지워지고 되돌릴 수 없어요.</p>
+          <form action={deleteEvent} className="mt-3">
+            <input type="hidden" name="event_id" value={event.id} />
+            <ConfirmSubmitButton
+              confirmMessage={`'${event.title}' 일정을 삭제할까요?\n\n함께 지워지는 것: 팀원 응답 ${answerRows.length}건, 라인업${confirmed ? " (확정된 라인업이라 캘린더에서도 사라져요)" : ""}\n\n삭제하면 되돌릴 수 없어요.`}
+              pendingText="삭제 중…"
+              className="btn border border-red-300 bg-white text-red-700 hover:bg-red-50"
+            >
+              일정 삭제
+            </ConfirmSubmitButton>
+          </form>
+        </section>
+      )}
 
       <section className="card mt-6">
         <h2 className="font-semibold">응답 목록</h2>
