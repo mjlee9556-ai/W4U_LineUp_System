@@ -4,7 +4,7 @@ J4U 찬양팀 라인업 관리 웹앱입니다. 팀원은 **전화번호 + PIN**
 
 카카오·Supabase 같은 외부 서비스 설정이 필요 없습니다. 데이터베이스는 이렇게 고릅니다.
 
-- `DATABASE_URL`(또는 `POSTGRES_URL`) 환경 변수가 있으면 그 Postgres를 씁니다. Vercel Storage에서 만든 DB가 자동으로 이 값을 넣어 줍니다.
+- `DATABASE_URL`(없으면 `POSTGRES_URL`, 그것도 없으면 `postgres://`로 시작하는 아무 환경 변수) 값이 있으면 그 Postgres를 씁니다. Vercel Storage에서 만든 DB가 자동으로 이 값을 넣어 줍니다.
 - 없으면 앱 안에 들어 있는 Postgres(PGlite)를 `./data/pglite` 폴더에 저장해 씁니다. 따로 설치할 것이 없습니다.
 - 테이블은 앱이 처음 켜질 때 자동으로 만들어집니다.
 
