@@ -7,8 +7,9 @@ import { formatMonth, formatShort } from "@/lib/dates";
 import { SESSION_SHORT, SIGNUP_SESSIONS } from "@/lib/sessions";
 import { hasSaturdayPractice, type Availability, type LineupEvent, type Member, type Round, type SessionRule } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { SubmitButton } from "@/components/SubmitButton";
-import { setRoundStatus, toggleSaturdayPractice } from "../../actions";
+import { deleteRound, setRoundStatus, toggleSaturdayPractice } from "../../actions";
 
 export default async function RoundPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -30,6 +31,13 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
 
   const responded = new Set(answers.map((a) => a.member_id));
   const missing = members.filter((m) => !responded.has(m.id));
+  const confirmedCount = events.filter((e) => e.lineup_status === "confirmed").length;
+  const roundLabel = formatMonth(round.target_month.slice(0, 7));
+  const deleteMessage = [
+    `${roundLabel} 회차를 삭제할까요?`,
+    `함께 지워지는 것: 주일 일정 ${events.length}개, 팀원 응답 ${answers.length}건${confirmedCount ? `, 확정된 라인업 ${confirmedCount}개 (캘린더에서도 사라져요)` : ""}`,
+    "삭제하면 되돌릴 수 없어요.",
+  ].join("\n\n");
 
   return (
     <AppShell member={member}>
@@ -109,6 +117,23 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
       <section className="card mt-6">
         <h2 className="font-semibold">미제출 {missing.length}명</h2>
         <p className="mt-2 text-sm text-stone-700">{missing.map((m) => m.name).join(", ") || "모두 제출했어요."}</p>
+      </section>
+
+      <section className="card mt-6">
+        <h2 className="font-semibold">회차 삭제</h2>
+        <p className="mt-2 text-sm text-stone-600">
+          이 달의 주일 일정과 팀원 응답, 라인업이 모두 함께 지워지고 되돌릴 수 없어요.
+        </p>
+        <form action={deleteRound} className="mt-3">
+          <input type="hidden" name="round_id" value={round.id} />
+          <ConfirmSubmitButton
+            confirmMessage={deleteMessage}
+            pendingText="삭제 중…"
+            className="btn border border-red-300 bg-white text-red-700 hover:bg-red-50"
+          >
+            {roundLabel} 회차 삭제
+          </ConfirmSubmitButton>
+        </form>
       </section>
     </AppShell>
   );
