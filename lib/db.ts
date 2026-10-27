@@ -1,7 +1,8 @@
 import "server-only";
+import { findDatabaseUrl } from "@/lib/database-url";
 import { SCHEMA_SQL } from "@/lib/schema";
 
-// DATABASE_URL이 있으면 그 Postgres(Vercel Storage의 Neon 등)를 쓰고,
+// Postgres 주소(DATABASE_URL 등, findDatabaseUrl 참고)가 있으면 그 Postgres(Vercel Storage의 Neon 등)를 쓰고,
 // 없으면 서버 안에 들어 있는 PGlite를 ./data 폴더에 저장해서 쓴다(별도 설치·계정 불필요).
 
 type Row = Record<string, unknown>;
@@ -43,7 +44,11 @@ async function createPostgres(url: string): Promise<Db> {
 
 async function createPglite(): Promise<Db> {
   if (process.env.VERCEL) {
-    throw new Error("Vercel에서는 Storage 탭에서 Postgres 데이터베이스를 연결해야 해요 (DATABASE_URL 없음).");
+    // 값은 빼고 이름만 남겨서 어떤 환경 변수가 들어왔는지 로그로 확인할 수 있게 한다
+    const names = Object.keys(process.env).filter((k) => /URL|POSTGRES|PG|DATABASE/.test(k)).sort().join(", ");
+    throw new Error(
+      `Vercel에서는 Storage 탭에서 Postgres 데이터베이스를 연결하고 Redeploy 해야 해요 (postgres 주소를 못 찾음). 보이는 환경 변수: ${names || "없음"}`,
+    );
   }
   const { PGlite, types } = await import("@electric-sql/pglite");
   const dir = process.env.PGLITE_DIR ?? "./data/pglite";
@@ -57,7 +62,7 @@ async function createPglite(): Promise<Db> {
 }
 
 async function init(): Promise<Db> {
-  const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+  const url = findDatabaseUrl(process.env);
   const db = url ? await createPostgres(url) : await createPglite();
   await db.transaction(async (tx) => {
     await tx.query("select pg_advisory_xact_lock(4242)");
