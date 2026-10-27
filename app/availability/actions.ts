@@ -5,9 +5,9 @@ import { redirect } from "next/navigation";
 import { requireMember } from "@/lib/auth";
 import { query, transaction } from "@/lib/db";
 import { todayKST } from "@/lib/dates";
-import { ACCEPTING_RESPONSES } from "@/lib/queries";
+import { ACCEPTING_RESPONSES, withDays } from "@/lib/queries";
 import { isSession } from "@/lib/sessions";
-import type { AvailabilityStatus } from "@/lib/types";
+import { statusOptionsFor, type AvailabilityStatus, type LineupEvent } from "@/lib/types";
 
 const STATUSES: AvailabilityStatus[] = ["both", "sun_only", "available", "none"];
 
@@ -25,16 +25,19 @@ export async function saveAvailability(formData: FormData) {
   if (rows.length === 0) redirect("/availability?error=empty");
 
   // 마감됐거나 확정된 일정은 저장하지 않는다
-  const open = new Set(
-    (
-      await query<{ id: string }>(
-        `select e.id from events e left join availability_rounds r on r.id = e.round_id
-          where e.id = any($1::uuid[]) and ${ACCEPTING_RESPONSES.replace("$TODAY", "$2")}`,
-        [rows.map((r) => r.eventId), todayKST()],
-      )
-    ).map((r) => r.id),
+  const open = await withDays(
+    await query<LineupEvent>(
+      `select e.* from events e left join availability_rounds r on r.id = e.round_id
+        where e.id = any($1::uuid[]) and ${ACCEPTING_RESPONSES.replace("$TODAY", "$2")}`,
+      [rows.map((r) => r.eventId), todayKST()],
+    ),
   );
-  if (rows.some((r) => !open.has(r.eventId))) redirect("/availability?error=save");
+  const openById = new Map(open.map((e) => [e.id, e]));
+  if (rows.some((r) => !openById.has(r.eventId))) redirect("/availability?error=save");
+  // 그 일정에서 고를 수 없는 응답(예: 토 연습 없는 주의 '토 불가')은 받지 않는다
+  if (rows.some((r) => !statusOptionsFor(openById.get(r.eventId)!).some((o) => o.value === r.status))) {
+    redirect("/availability?error=save");
+  }
 
   await transaction(async (tx) => {
     for (const r of rows) {

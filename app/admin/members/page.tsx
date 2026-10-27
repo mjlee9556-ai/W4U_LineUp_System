@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { formatPhone } from "@/lib/pin";
 import { SESSION_LABELS, type Session } from "@/lib/sessions";
-import type { Member } from "@/lib/types";
+import { formatAddress, type Member } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -43,7 +43,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                 <span className="ml-1 text-xs text-stone-500">{STATUS_LABEL[m.status]}</span>
               </div>
               <div className="text-xs text-stone-500">
-                {formatPhone(m.phone)} · {m.sessions.map((s) => SESSION_LABELS[s]).join(", ")} · {m.district} {m.dong}
+                {formatPhone(m.phone)} · {m.sessions.map((s) => SESSION_LABELS[s]).join(", ")} · {formatAddress(m)}
               </div>
             </div>
             <div className="flex flex-wrap gap-1">

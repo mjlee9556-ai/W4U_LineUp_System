@@ -1,6 +1,7 @@
 import { requireMember } from "@/lib/auth";
 import { formatPhone, PIN_PATTERN } from "@/lib/pin";
 import { SESSION_LABELS } from "@/lib/sessions";
+import { formatAddress } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -20,7 +21,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
       <h1 className="text-xl font-bold">내 정보</h1>
       <section className="card mt-4 text-sm">
         <div className="font-medium">{member.name}</div>
-        <div className="mt-1 text-stone-600">{formatPhone(member.phone)} · {member.district} {member.dong}</div>
+        <div className="mt-1 text-stone-600">{formatPhone(member.phone)} · {formatAddress(member)}</div>
         <div className="mt-1 text-stone-600">기본 세션: {sessions.map((s) => SESSION_LABELS[s]).join(", ")}</div>
       </section>
 

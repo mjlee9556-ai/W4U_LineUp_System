@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { addDays, formatMonth, formatShort, shiftMonth, todayKST } from "@/lib/dates";
 import { SESSION_LABELS, type Session } from "@/lib/sessions";
-import { EVENT_TYPE_LABELS, type LineupEvent, type Member, type Round } from "@/lib/types";
+import { EVENT_TYPE_LABELS, formatAddress, type LineupEvent, type Member, type Round } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -113,7 +113,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 <div>
                   <div className="font-medium">{m.name}</div>
                   <div className="text-xs text-stone-500">
-                    {m.sessions.map((s) => SESSION_LABELS[s]).join(", ")} · {m.district} {m.dong}
+                    {m.sessions.map((s) => SESSION_LABELS[s]).join(", ")} · {formatAddress(m)}
                   </div>
                 </div>
                 <div className="flex gap-1">

@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { getOpenEvents } from "@/lib/queries";
 import { formatMonth, formatShort } from "@/lib/dates";
 import { SESSION_LABELS, SESSIONS, type Session } from "@/lib/sessions";
-import { EVENT_TYPE_LABELS, statusOptionsFor, type Availability } from "@/lib/types";
+import { EVENT_TYPE_LABELS, hasSaturdayPractice, statusOptionsFor, type Availability } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -63,14 +63,16 @@ export default async function AvailabilityPage({
                   </h2>
                   <span className="text-xs text-stone-500">
                     {event.type === "weekend"
-                      ? `토 ${formatShort(event.start_date)} 연습`
+                      ? hasSaturdayPractice(event)
+                        ? `토 ${formatShort(event.start_date)} 연습`
+                        : "토 연습 없음"
                       : `${EVENT_TYPE_LABELS[event.type]} · ${days.map((d) => formatShort(d.date)).join(", ")}`}
                   </span>
                 </div>
                 {event.note && <p className="mt-1 text-xs text-stone-500">{event.note}</p>}
 
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {statusOptionsFor(event.type).map((opt) => (
+                  {statusOptionsFor(event).map((opt) => (
                     <label key={opt.value}>
                       <input
                         type="radio"
