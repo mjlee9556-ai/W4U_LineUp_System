@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
+import { query, queryOne } from "@/lib/db";
 import { formatMonth, formatShort } from "@/lib/dates";
 import { SESSION_SHORT, SIGNUP_SESSIONS } from "@/lib/sessions";
 import type { Availability, LineupEvent, Member, Round, SessionRule } from "@/lib/types";
@@ -10,23 +11,21 @@ import { setRoundStatus } from "../../actions";
 
 export default async function RoundPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { supabase, member } = await requireAdmin();
+  const { member } = await requireAdmin();
 
-  const { data: round } = await supabase.from("availability_rounds").select("*").eq("id", id).maybeSingle<Round>();
+  const round = await queryOne<Round>(`select * from availability_rounds where id = $1`, [id]);
   if (!round) notFound();
 
-  const { data: eventRows } = await supabase.from("events").select("*").eq("round_id", id).order("start_date");
-  const events = (eventRows ?? []) as LineupEvent[];
-  const eventIds = events.map((e) => e.id);
-
-  const [{ data: answerRows }, { data: memberRows }, { data: ruleRows }] = await Promise.all([
-    eventIds.length ? supabase.from("availabilities").select("*").in("event_id", eventIds) : Promise.resolve({ data: [] }),
-    supabase.from("members").select("id, name").eq("status", "approved").order("name"),
-    supabase.from("session_rules").select("*"),
+  const [events, answers, members, ruleRows] = await Promise.all([
+    query<LineupEvent>(`select * from events where round_id = $1 order by start_date`, [id]),
+    query<Availability>(
+      `select a.* from availabilities a join events e on e.id = a.event_id where e.round_id = $1`,
+      [id],
+    ),
+    query<Pick<Member, "id" | "name">>(`select id, name from members where status = 'approved' order by name`),
+    query<SessionRule>(`select * from session_rules`),
   ]);
-  const answers = (answerRows ?? []) as Availability[];
-  const members = (memberRows ?? []) as Pick<Member, "id" | "name">[];
-  const rules = new Map(((ruleRows ?? []) as SessionRule[]).map((r) => [r.session, r]));
+  const rules = new Map(ruleRows.map((r) => [r.session, r]));
 
   const responded = new Set(answers.map((a) => a.member_id));
   const missing = members.filter((m) => !responded.has(m.id));

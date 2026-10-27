@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
+import { query, queryOne } from "@/lib/db";
+import { withDays } from "@/lib/queries";
 import { formatShort } from "@/lib/dates";
 import { capacityWarnings } from "@/lib/lineup";
 import { SESSION_LABELS, SESSIONS, type Session } from "@/lib/sessions";
@@ -21,22 +23,20 @@ export default async function EventLineupPage({
 }) {
   const { id } = await params;
   const { saved } = await searchParams;
-  const { supabase, member } = await requireAdmin();
+  const { member } = await requireAdmin();
 
-  const { data: event } = await supabase.from("events").select("*, event_days(*)").eq("id", id).maybeSingle<LineupEvent>();
-  if (!event) notFound();
+  const found = await queryOne<LineupEvent>(`select * from events where id = $1`, [id]);
+  if (!found) notFound();
+  const [event] = await withDays([found]);
 
-  const [{ data: answerRows }, { data: assignmentRows }, { data: memberRows }, { data: ruleRows }] = await Promise.all([
-    supabase.from("availabilities").select("*").eq("event_id", id),
-    supabase.from("lineup_assignments").select("*").eq("event_id", id),
-    supabase.from("members").select("id, name").eq("status", "approved").order("name"),
-    supabase.from("session_rules").select("*"),
+  const [answerRows, assignments, members, rules] = await Promise.all([
+    query<Availability>(`select * from availabilities where event_id = $1`, [id]),
+    query<Assignment>(`select * from lineup_assignments where event_id = $1`, [id]),
+    query<Pick<Member, "id" | "name">>(`select id, name from members where status = 'approved' order by name`),
+    query<SessionRule>(`select * from session_rules`),
   ]);
-  const answers = new Map(((answerRows ?? []) as Availability[]).map((a) => [a.member_id, a]));
-  const assignments = (assignmentRows ?? []) as Assignment[];
+  const answers = new Map(answerRows.map((a) => [a.member_id, a]));
   const assigned = new Set(assignments.map((a) => `${a.session}:${a.member_id}`));
-  const members = (memberRows ?? []) as Pick<Member, "id" | "name">[];
-  const rules = (ruleRows ?? []) as SessionRule[];
   const ruleBySession = new Map(rules.map((r) => [r.session, r]));
 
   const counts: Partial<Record<Session, number>> = {};

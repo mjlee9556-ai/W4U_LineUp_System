@@ -1,87 +1,127 @@
 "use server";
 
+import { randomInt } from "crypto";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
-import { addDays, isValidMonth, monthStart, weekendSets } from "@/lib/dates";
+import { query, queryOne, transaction } from "@/lib/db";
+import { addDays, isValidMonth, monthStart, todayKST, weekendSets } from "@/lib/dates";
+import { hashPin } from "@/lib/pin";
 import { isSession } from "@/lib/sessions";
-import type { Availability, EventType, MemberStatus } from "@/lib/types";
+import type { EventType, MemberStatus } from "@/lib/types";
 
 export async function setMemberStatus(formData: FormData) {
-  const { supabase } = await requireAdmin();
-  const id = String(formData.get("member_id"));
+  await requireAdmin();
   const status = String(formData.get("status")) as MemberStatus;
   if (!["approved", "inactive", "pending"].includes(status)) return;
-  await supabase.from("members").update({ status }).eq("id", id);
+  await query(`update members set status = $2 where id = $1`, [String(formData.get("member_id")), status]);
   revalidatePath("/admin");
+  revalidatePath("/admin/members");
+}
+
+export async function setMemberRole(formData: FormData) {
+  const { member } = await requireAdmin();
+  const id = String(formData.get("member_id"));
+  const role = String(formData.get("role")) === "admin" ? "admin" : "member";
+  if (id === member.id && role === "member") redirect("/admin/members?error=self");
+  await query(`update members set role = $2 where id = $1`, [id, role]);
+  revalidatePath("/admin/members");
+}
+
+/** 임시 PIN을 만들어 관리자 화면에 한 번 보여준다 */
+export async function resetPin(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("member_id"));
+  const temp = String(randomInt(0, 10000)).padStart(4, "0");
+  const target = await queryOne<{ name: string }>(
+    `update members set pin_hash = $2, failed_logins = 0, locked_until = null where id = $1 returning name`,
+    [id, hashPin(temp)],
+  );
+  await query(`delete from auth_sessions where member_id = $1`, [id]);
+  // 주소창·로그에 남지 않도록 1분짜리 쿠키로 한 번만 전달
+  (await cookies()).set("j4u_flash_pin", JSON.stringify({ name: target?.name ?? "", pin: temp }), {
+    httpOnly: true,
+    sameSite: "strict",
+    path: "/admin/members",
+    maxAge: 60,
+  });
+  redirect("/admin/members");
 }
 
 function randomCode() {
   // 헷갈리는 글자(0/O, 1/I)는 뺀다
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+  return Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join("");
 }
 
 export async function createInviteCode(formData: FormData) {
-  const { supabase, member } = await requireAdmin();
+  const { member } = await requireAdmin();
   const maxUses = Number(formData.get("max_uses")) || null;
   const days = Number(formData.get("expires_days")) || null;
-  const expires_at = days ? new Date(Date.now() + days * 86400_000).toISOString() : null;
-  await supabase.from("invite_codes").insert({ code: randomCode(), created_by: member.id, max_uses: maxUses, expires_at });
+  await query(
+    `insert into invite_codes (code, created_by, max_uses, expires_at)
+     values ($1, $2, $3, case when $4::int is null then null else now() + make_interval(days => $4::int) end)`,
+    [randomCode(), member.id, maxUses, days],
+  );
   revalidatePath("/admin");
 }
 
 export async function deleteInviteCode(formData: FormData) {
-  const { supabase } = await requireAdmin();
-  await supabase.from("invite_codes").delete().eq("code", String(formData.get("code")));
+  await requireAdmin();
+  await query(`delete from invite_codes where code = $1`, [String(formData.get("code"))]);
   revalidatePath("/admin");
 }
 
 /** 수집 회차를 열고 그 달 주말 세트(토 연습 + 일 예배)를 만든다 */
 export async function createRound(formData: FormData) {
-  const { supabase } = await requireAdmin();
+  await requireAdmin();
   const month = String(formData.get("month"));
   const closesOn = String(formData.get("closes_on") ?? "");
   if (!isValidMonth(month)) redirect("/admin?error=month");
+  if (closesOn && closesOn < todayKST()) redirect("/admin?error=closes");
 
   // 마감일은 그날 자정(한국 시간)까지
-  const closes_at = closesOn ? new Date(`${addDays(closesOn, 1)}T00:00:00+09:00`).toISOString() : null;
-  const { data: round, error } = await supabase
-    .from("availability_rounds")
-    .insert({ target_month: monthStart(month), closes_at })
-    .select()
-    .single();
-  if (error || !round) redirect("/admin?error=round");
+  const closesAt = closesOn ? `${addDays(closesOn, 1)}T00:00:00+09:00` : null;
 
-  for (const set of weekendSets(month)) {
-    const { data: event } = await supabase
-      .from("events")
-      .insert({ round_id: round.id, type: "weekend", title: "주일 예배", start_date: set.saturday, end_date: set.sunday })
-      .select()
-      .single();
-    if (!event) continue;
-    await supabase.from("event_days").insert([
-      { event_id: event.id, date: set.saturday, kind: "practice" },
-      { event_id: event.id, date: set.sunday, kind: "service" },
-    ]);
+  let roundId: string;
+  try {
+    roundId = await transaction(async (tx) => {
+      const { rows } = await tx.query<{ id: string }>(
+        `insert into availability_rounds (target_month, closes_at) values ($1, $2) returning id`,
+        [monthStart(month), closesAt],
+      );
+      for (const set of weekendSets(month)) {
+        const event = await tx.query<{ id: string }>(
+          `insert into events (round_id, type, title, start_date, end_date) values ($1, 'weekend', '주일 예배', $2, $3) returning id`,
+          [rows[0].id, set.saturday, set.sunday],
+        );
+        await tx.query(
+          `insert into event_days (event_id, date, kind) values ($1, $2, 'practice'), ($1, $3, 'service')`,
+          [event.rows[0].id, set.saturday, set.sunday],
+        );
+      }
+      return rows[0].id;
+    });
+  } catch {
+    redirect("/admin?error=round");
   }
 
   revalidatePath("/admin");
-  redirect(`/admin/rounds/${round.id}`);
+  redirect(`/admin/rounds/${roundId}`);
 }
 
 export async function setRoundStatus(formData: FormData) {
-  const { supabase } = await requireAdmin();
+  await requireAdmin();
   const id = String(formData.get("round_id"));
   const status = String(formData.get("status")) === "open" ? "open" : "closed";
-  await supabase.from("availability_rounds").update({ status }).eq("id", id);
+  await query(`update availability_rounds set status = $2 where id = $1`, [id, status]);
   revalidatePath(`/admin/rounds/${id}`);
 }
 
 /** 수련회·특별예배: 월 수집과 별개 일정. 기간의 매일을 섬김일로 만든다 */
 export async function createSpecialEvent(formData: FormData) {
-  const { supabase } = await requireAdmin();
+  await requireAdmin();
   const type = String(formData.get("type")) as EventType;
   const title = String(formData.get("title") ?? "").trim();
   const start = String(formData.get("start_date"));
@@ -89,24 +129,24 @@ export async function createSpecialEvent(formData: FormData) {
   const note = String(formData.get("note") ?? "").trim() || null;
   if (!["retreat", "special"].includes(type) || !title || !start || end < start) redirect("/admin?error=event");
 
-  const { data: event } = await supabase
-    .from("events")
-    .insert({ type, title, note, start_date: start, end_date: end })
-    .select()
-    .single();
-  if (!event) redirect("/admin?error=event");
-
-  const days = [];
-  for (let d = start; d <= end; d = addDays(d, 1)) days.push({ event_id: event.id, date: d, kind: "service" as const });
-  await supabase.from("event_days").insert(days);
+  const eventId = await transaction(async (tx) => {
+    const { rows } = await tx.query<{ id: string }>(
+      `insert into events (type, title, note, start_date, end_date) values ($1, $2, $3, $4, $5) returning id`,
+      [type, title, note, start, end],
+    );
+    for (let d = start; d <= end; d = addDays(d, 1)) {
+      await tx.query(`insert into event_days (event_id, date, kind) values ($1, $2, 'service')`, [rows[0].id, d]);
+    }
+    return rows[0].id;
+  });
 
   revalidatePath("/admin");
-  redirect(`/admin/events/${event.id}`);
+  redirect(`/admin/events/${eventId}`);
 }
 
 /** 라인업 저장. 체크값은 'session:memberId' */
 export async function saveLineup(formData: FormData) {
-  const { supabase } = await requireAdmin();
+  await requireAdmin();
   const eventId = String(formData.get("event_id"));
   const intent = String(formData.get("intent") ?? "save");
 
@@ -116,19 +156,26 @@ export async function saveLineup(formData: FormData) {
     .map((v) => v.split(":"))
     .filter(([session, memberId]) => isSession(session) && !!memberId);
 
-  const { data: answers } = await supabase.from("availabilities").select("*").eq("event_id", eventId);
-  const sunOnly = new Set(((answers ?? []) as Availability[]).filter((a) => a.status === "sun_only").map((a) => a.member_id));
-
-  await supabase.from("lineup_assignments").delete().eq("event_id", eventId);
-  if (picks.length) {
-    await supabase.from("lineup_assignments").insert(
-      picks.map(([session, memberId]) => ({ event_id: eventId, member_id: memberId, session, sat_absent: sunOnly.has(memberId) })),
+  await transaction(async (tx) => {
+    const sunOnly = new Set(
+      (
+        await tx.query<{ member_id: string }>(
+          `select member_id from availabilities where event_id = $1 and status = 'sun_only'`,
+          [eventId],
+        )
+      ).rows.map((r) => r.member_id),
     );
-  }
-
-  if (intent === "confirm") {
-    await supabase.from("events").update({ lineup_status: "confirmed", confirmed_at: new Date().toISOString() }).eq("id", eventId);
-  }
+    await tx.query(`delete from lineup_assignments where event_id = $1`, [eventId]);
+    for (const [session, memberId] of picks) {
+      await tx.query(
+        `insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)`,
+        [eventId, memberId, session, sunOnly.has(memberId)],
+      );
+    }
+    if (intent === "confirm") {
+      await tx.query(`update events set lineup_status = 'confirmed', confirmed_at = now() where id = $1`, [eventId]);
+    }
+  });
 
   revalidatePath(`/admin/events/${eventId}`);
   revalidatePath("/calendar");
@@ -136,9 +183,9 @@ export async function saveLineup(formData: FormData) {
 }
 
 export async function unconfirmLineup(formData: FormData) {
-  const { supabase } = await requireAdmin();
+  await requireAdmin();
   const eventId = String(formData.get("event_id"));
-  await supabase.from("events").update({ lineup_status: "draft", confirmed_at: null }).eq("id", eventId);
+  await query(`update events set lineup_status = 'draft', confirmed_at = null where id = $1`, [eventId]);
   revalidatePath(`/admin/events/${eventId}`);
   revalidatePath("/calendar");
 }

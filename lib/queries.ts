@@ -1,58 +1,55 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import "server-only";
+import { query } from "@/lib/db";
 import { todayKST } from "@/lib/dates";
-import type { LineupEvent, Round } from "@/lib/types";
+import type { EventDay, LineupEvent, Round } from "@/lib/types";
 
-const EVENT_SELECT = "*, event_days(*)";
-
-function sortDays(events: LineupEvent[]): LineupEvent[] {
-  for (const e of events) e.event_days?.sort((a, b) => a.date.localeCompare(b.date));
+/** 일정마다 event_days를 붙인다 (날짜순) */
+export async function withDays(events: LineupEvent[]): Promise<LineupEvent[]> {
+  if (events.length === 0) return events;
+  const days = await query<EventDay>(
+    `select id, event_id, date, kind, start_time::text as start_time from event_days where event_id = any($1::uuid[]) order by date`,
+    [events.map((e) => e.id)],
+  );
+  for (const e of events) e.event_days = days.filter((d) => d.event_id === e.id);
   return events;
 }
 
+/** 응답을 받을 수 있는 일정인지 판단하는 SQL 조건 (events e, availability_rounds r 기준) */
+export const ACCEPTING_RESPONSES = `
+  e.lineup_status = 'draft'
+  and (
+    (e.round_id is null and e.end_date >= $TODAY)
+    or (r.status = 'open' and (r.closes_at is null or r.closes_at > now()))
+  )`;
+
 /** 지금 응답을 받는 일정: 열린 회차의 주말 세트 + 아직 지나지 않은 비주말 일정 */
-export async function getOpenEvents(supabase: SupabaseClient) {
-  const now = new Date().toISOString();
-  const { data: rounds } = await supabase
-    .from("availability_rounds")
-    .select("*")
-    .eq("status", "open")
-    .or(`closes_at.is.null,closes_at.gt.${now}`)
-    .order("target_month");
-
-  const roundIds = (rounds ?? []).map((r: Round) => r.id);
-  const [{ data: roundEvents }, { data: specialEvents }] = await Promise.all([
-    roundIds.length
-      ? supabase.from("events").select(EVENT_SELECT).in("round_id", roundIds).eq("lineup_status", "draft")
-      : Promise.resolve({ data: [] }),
-    supabase
-      .from("events")
-      .select(EVENT_SELECT)
-      .is("round_id", null)
-      .eq("lineup_status", "draft")
-      .gte("end_date", todayKST()),
-  ]);
-
-  const events = sortDays([...(roundEvents ?? []), ...(specialEvents ?? [])] as LineupEvent[]).sort((a, b) =>
-    a.start_date.localeCompare(b.start_date),
+export async function getOpenEvents() {
+  const today = todayKST();
+  const rounds = await query<Round>(
+    `select * from availability_rounds where status = 'open' and (closes_at is null or closes_at > now()) order by target_month`,
   );
-  return { rounds: (rounds ?? []) as Round[], events };
+  const events = await query<LineupEvent>(
+    `select e.* from events e left join availability_rounds r on r.id = e.round_id
+      where ${ACCEPTING_RESPONSES.replace("$TODAY", "$1")}
+      order by e.start_date`,
+    [today],
+  );
+  return { rounds, events: await withDays(events) };
 }
 
 /** 기간과 겹치는 일정 (캘린더용) */
-export async function getEventsBetween(supabase: SupabaseClient, from: string, to: string) {
-  const { data } = await supabase
-    .from("events")
-    .select(EVENT_SELECT)
-    .lte("start_date", to)
-    .gte("end_date", from)
-    .order("start_date");
-  return sortDays((data ?? []) as LineupEvent[]);
+export async function getEventsBetween(from: string, to: string) {
+  const events = await query<LineupEvent>(
+    `select * from events where start_date <= $2 and end_date >= $1 order by start_date`,
+    [from, to],
+  );
+  return withDays(events);
 }
 
-/** member_directory 뷰로 이름만 조회 */
-export async function getMemberNames(supabase: SupabaseClient, ids: string[]) {
+/** 이름만 조회 (다른 팀원에게 연락처는 보여주지 않는다) */
+export async function getMemberNames(ids: string[]) {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return new Map<string, string>();
-  const { data } = await supabase.from("member_directory").select("id, name").in("id", unique);
-  return new Map((data ?? []).map((m: { id: string; name: string }) => [m.id, m.name]));
+  const rows = await query<{ id: string; name: string }>(`select id, name from members where id = any($1::uuid[])`, [unique]);
+  return new Map(rows.map((m) => [m.id, m.name]));
 }
