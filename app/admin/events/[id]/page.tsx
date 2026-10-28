@@ -9,6 +9,7 @@ import { EVENT_TYPE_LABELS, type Assignment, type Availability, type LineupEvent
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { ServeCountTable } from "@/components/ServeCountTable";
 import { SubmitButton } from "@/components/SubmitButton";
 import { deleteEvent, saveLineup, unconfirmLineup } from "../../actions";
 
@@ -35,6 +36,13 @@ export default async function EventLineupPage({
     query<Pick<Member, "id" | "name">>(`select id, name from members where status = 'approved' order by name`),
     query<Guest>(`select * from lineup_guests where event_id = $1 order by name`, [id]),
   ]);
+  // 같은 달(회차) 전체 배정: 섬김 횟수 표용
+  const monthAssignments = event.round_id
+    ? await query<Assignment>(
+        `select a.* from lineup_assignments a join events e on e.id = a.event_id where e.round_id = $1`,
+        [event.round_id],
+      )
+    : [];
   const answers = new Map(answerRows.map((a) => [a.member_id, a]));
   const assigned = new Set(assignments.map((a) => `${a.session}:${a.member_id}`));
 
@@ -151,6 +159,16 @@ export default async function EventLineupPage({
           </div>
         )}
       </form>
+
+      {event.round_id && (
+        <section className="mt-6">
+          <h2 className="font-semibold">이번 달 섬김 횟수</h2>
+          <p className="mt-1 text-xs text-stone-500">저장된 배정 기준이에요. 고친 뒤 &apos;임시 저장&apos;을 누르면 바로 반영돼요.</p>
+          <div className="mt-3">
+            <ServeCountTable members={members} assignments={monthAssignments} />
+          </div>
+        </section>
+      )}
 
       {event.type !== "weekend" && (
         <section className="card mt-6">
