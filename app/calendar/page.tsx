@@ -5,7 +5,7 @@ import { getEventsBetween, getMemberNames } from "@/lib/queries";
 import { calendarGrid, formatMonth, formatShort, isValidMonth, parseISODate, shiftMonth, todayKST, WEEKDAYS } from "@/lib/dates";
 import { buildLineup, groupBySession, practiceDates, serviceDates, type LineupEntry } from "@/lib/lineup";
 import { SESSION_LABELS, SESSION_SHORT } from "@/lib/sessions";
-import { EVENT_TYPE_LABELS, type Assignment, type LineupEvent } from "@/lib/types";
+import { EVENT_TYPE_LABELS, type Assignment, type Guest, type LineupEvent } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 
 type DayItem =
@@ -23,14 +23,23 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const confirmed = events.filter((e) => e.lineup_status === "confirmed");
 
   // 확정된 일정의 배정만 공개
-  const assignments = await query<Assignment>(`select * from lineup_assignments where event_id = any($1::uuid[])`, [
-    confirmed.map((e) => e.id),
+  const confirmedIds = confirmed.map((e) => e.id);
+  const [assignments, guests] = await Promise.all([
+    query<Assignment>(`select * from lineup_assignments where event_id = any($1::uuid[])`, [confirmedIds]),
+    query<Guest>(`select * from lineup_guests where event_id = any($1::uuid[]) order by name`, [confirmedIds]),
   ]);
   const names = await getMemberNames(assignments.map((a) => a.member_id));
 
   const lineupByEvent = new Map<string, LineupEntry[]>();
   for (const e of confirmed) {
-    lineupByEvent.set(e.id, buildLineup(assignments.filter((a) => a.event_id === e.id), names));
+    lineupByEvent.set(
+      e.id,
+      buildLineup(
+        assignments.filter((a) => a.event_id === e.id),
+        names,
+        guests.filter((g) => g.event_id === e.id),
+      ),
+    );
   }
 
   // 날짜 → 그날 표시할 항목
@@ -46,6 +55,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     .filter((x) => x.date.startsWith(month))
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // 이 달에 내가 섬기는 날짜와 세션
+  const myServices = monthServices
+    .map(({ date, event }) => ({
+      date,
+      sessions: (lineupByEvent.get(event.id) ?? []).filter((l) => l.memberId === member.id).map((l) => SESSION_LABELS[l.session]),
+    }))
+    .filter((x) => x.sessions.length > 0);
+
   return (
     <AppShell member={member}>
       <div className="flex items-center justify-between">
@@ -56,6 +73,19 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <Link href={`/calendar?month=${shiftMonth(month, 1)}`} className="btn-secondary px-3 py-1.5" aria-label="다음 달">›</Link>
         </div>
       </div>
+
+      {myServices.length > 0 && (
+        <section className="mt-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-3">
+          <h2 className="text-sm font-semibold text-amber-900">⭐ 이번 달 내 섬김</h2>
+          <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-amber-900">
+            {myServices.map((s) => (
+              <li key={s.date}>
+                <span className="font-semibold">{formatShort(s.date)}</span> {s.sessions.join(", ")}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="mt-4 overflow-hidden rounded-xl border border-stone-200 bg-white">
         <div className="grid grid-cols-7 border-b border-stone-200 bg-stone-50 text-center text-xs text-stone-500">
@@ -70,11 +100,18 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
             return (
               <div
                 key={date}
-                className={`min-h-16 border-b border-r border-stone-100 p-1 md:min-h-28 ${inMonth ? "" : "bg-stone-50 text-stone-400"} ${mine ? "bg-amber-50" : ""}`}
+                className={`relative min-h-16 border-b border-r border-stone-100 p-1 md:min-h-28 ${
+                  mine ? "bg-amber-100 ring-2 ring-inset ring-amber-400" : inMonth ? "" : "bg-stone-50 text-stone-400"
+                }`}
               >
                 <div className={`text-xs ${date === today ? "inline-block rounded-full bg-stone-900 px-1.5 text-white" : ""}`}>
                   {parseISODate(date).getUTCDate()}
                 </div>
+                {mine && (
+                  <span className="absolute right-0.5 top-0.5 text-sm leading-none" title="내 섬김" aria-label="내 섬김">
+                    ⭐
+                  </span>
+                )}
                 {items.map((item, idx) =>
                   item.kind === "practice" ? (
                     <div key={idx} className="mt-0.5 truncate text-[10px] text-stone-500">연습</div>
@@ -116,9 +153,10 @@ function CalendarCell({ event, lineup, myId }: { event: LineupEvent; lineup: Lin
           <li key={g.session} className="truncate">
             <span className="text-stone-400">{SESSION_SHORT[g.session]} </span>
             {g.entries.map((e, i) => (
-              <span key={e.memberId} className={e.memberId === myId ? "font-semibold text-amber-700" : ""}>
+              <span key={e.key} className={e.memberId === myId ? "font-semibold text-amber-700" : e.guest ? "text-stone-500" : ""}>
                 {i > 0 && ", "}
                 {e.name}
+                {e.guest && "(G)"}
               </span>
             ))}
           </li>
@@ -130,12 +168,14 @@ function CalendarCell({ event, lineup, myId }: { event: LineupEvent; lineup: Lin
 
 function LineupCard({ date, event, lineup, myId }: { date: string; event: LineupEvent; lineup?: LineupEntry[]; myId: string }) {
   const practice = practiceDates(event);
+  const mine = event.lineup_status === "confirmed" && !!lineup?.some((l) => l.memberId === myId);
   return (
-    <section className="card">
+    <section className={`card ${mine ? "border-2 border-amber-400 bg-amber-50" : ""}`}>
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="font-semibold">
           {formatShort(date)}
           {event.type !== "weekend" && <span className="ml-2 text-sm font-normal text-violet-700">{event.title}</span>}
+          {mine && <span className="ml-2 rounded-full bg-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-950">⭐ 내 섬김</span>}
         </h3>
         <span className="text-xs text-stone-500">
           {event.type === "weekend" ? EVENT_TYPE_LABELS.weekend : EVENT_TYPE_LABELS[event.type]}
@@ -151,9 +191,10 @@ function LineupCard({ date, event, lineup, myId }: { date: string; event: Lineup
               <dt className="text-stone-500">{SESSION_LABELS[g.session]}</dt>
               <dd>
                 {g.entries.map((e, i) => (
-                  <span key={e.memberId}>
+                  <span key={e.key}>
                     {i > 0 && ", "}
                     <span className={e.memberId === myId ? "font-semibold text-amber-700" : ""}>{e.name}</span>
+                    {e.guest && <span className="ml-1 rounded bg-stone-100 px-1 text-xs text-stone-600">게스트</span>}
                     {e.satAbsent && <span className="ml-1 rounded bg-red-50 px-1 text-xs text-red-700">토 불참</span>}
                   </span>
                 ))}

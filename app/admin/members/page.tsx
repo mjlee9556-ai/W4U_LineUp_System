@@ -7,14 +7,15 @@ import { SESSION_LABELS, type Session } from "@/lib/sessions";
 import { formatAddress, type Member } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { SubmitButton } from "@/components/SubmitButton";
-import { resetPin, setMemberRole, setMemberStatus } from "../actions";
+import { deleteMember, resetPin, setMemberRole, setMemberStatus } from "../actions";
 
 const STATUS_LABEL = { approved: "활동", pending: "승인 대기", inactive: "비활성" } as const;
 
-export default async function MembersPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function MembersPage({ searchParams }: { searchParams: Promise<{ error?: string; deleted?: string }> }) {
   const { member: me } = await requireAdmin();
-  const { error } = await searchParams;
+  const { error, deleted } = await searchParams;
   const flash = (await cookies()).get("j4u_flash_pin")?.value;
   const { name: resetName, pin: resetPinValue } = flash ? (JSON.parse(flash) as { name: string; pin: string }) : { name: "", pin: "" };
 
@@ -30,7 +31,17 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
       <h1 className="mt-2 text-xl font-bold">팀원 관리</h1>
       <div className="mt-4">
         <Notice message={resetPinValue ? `${resetName}님의 임시 PIN은 ${resetPinValue}이에요. 본인에게 전달해 주세요. 1분 뒤에는 다시 볼 수 없어요.` : undefined} />
-        <Notice tone="error" message={error === "self" ? "본인의 관리자 권한은 직접 해제할 수 없어요." : undefined} />
+        <Notice message={deleted ? `${deleted}님의 계정을 삭제했어요.` : undefined} />
+        <Notice
+          tone="error"
+          message={
+            error === "self"
+              ? "본인의 관리자 권한은 직접 해제할 수 없어요."
+              : error === "self-delete"
+                ? "본인 계정은 삭제할 수 없어요."
+                : undefined
+          }
+        />
       </div>
 
       <ul className="divide-y divide-stone-100 rounded-xl border border-stone-200 bg-white">
@@ -65,6 +76,22 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                   {m.status === "approved" ? "비활성화" : "승인"}
                 </SubmitButton>
               </form>
+              {m.id !== me.id && (
+                <form action={deleteMember}>
+                  <input type="hidden" name="member_id" value={m.id} />
+                  <ConfirmSubmitButton
+                    confirmMessage={[
+                      `${m.name}님의 계정을 삭제할까요?`,
+                      "• 가능일자 응답과 아직 확정 전인 라인업 배정은 함께 지워져요.\n• 이미 확정된 라인업에는 이름만 '게스트'로 남아 캘린더 기록이 유지돼요.\n• 다시 쓰려면 새로 가입해야 해요.",
+                      "삭제하면 되돌릴 수 없어요. 잠시 쉬는 거라면 '비활성화'를 써 주세요.",
+                    ].join("\n\n")}
+                    pendingText="…"
+                    className="btn border border-red-300 bg-white px-3 py-1 text-xs text-red-700 hover:bg-red-50"
+                  >
+                    계정 삭제
+                  </ConfirmSubmitButton>
+                </form>
+              )}
             </div>
           </li>
         ))}

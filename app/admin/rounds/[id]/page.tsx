@@ -5,7 +5,7 @@ import { query, queryOne } from "@/lib/db";
 import { withDays } from "@/lib/queries";
 import { formatMonth, formatShort } from "@/lib/dates";
 import { SESSION_SHORT, SIGNUP_SESSIONS } from "@/lib/sessions";
-import { hasSaturdayPractice, type Availability, type LineupEvent, type Member, type Round, type SessionRule } from "@/lib/types";
+import { hasSaturdayPractice, type Availability, type LineupEvent, type Member, type Round } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -18,16 +18,14 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
   const round = await queryOne<Round>(`select * from availability_rounds where id = $1`, [id]);
   if (!round) notFound();
 
-  const [events, answers, members, ruleRows] = await Promise.all([
+  const [events, answers, members] = await Promise.all([
     query<LineupEvent>(`select * from events where round_id = $1 order by start_date`, [id]).then(withDays),
     query<Availability>(
       `select a.* from availabilities a join events e on e.id = a.event_id where e.round_id = $1`,
       [id],
     ),
     query<Pick<Member, "id" | "name">>(`select id, name from members where status = 'approved' order by name`),
-    query<SessionRule>(`select * from session_rules`),
   ]);
-  const rules = new Map(ruleRows.map((r) => [r.session, r]));
 
   const responded = new Set(answers.map((a) => a.member_id));
   const missing = members.filter((m) => !responded.has(m.id));
@@ -76,9 +74,8 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
                   <td className="whitespace-nowrap px-2 py-2 text-left">{formatShort(e.end_date)}</td>
                   {SIGNUP_SESSIONS.map((s) => {
                     const count = available.filter((a) => a.sessions.includes(s)).length;
-                    const short = count < (rules.get(s)?.min ?? 0);
                     return (
-                      <td key={s} className={`px-2 py-2 ${short ? "bg-red-50 font-semibold text-red-700" : ""}`}>{count}</td>
+                      <td key={s} className={`px-2 py-2 ${count === 0 ? "text-stone-300" : ""}`}>{count}</td>
                     );
                   })}
                   <td className="px-2 py-2 text-stone-500">{available.filter((a) => a.status === "sun_only").length}</td>
@@ -110,7 +107,7 @@ export default async function RoundPage({ params }: { params: Promise<{ id: stri
         </table>
       </div>
       <p className="mt-2 text-xs text-stone-500">
-        숫자는 세션별 가능 인원이에요. 빨간 칸은 정원보다 적어요. 토요일 연습이 없는 주는 &apos;토 연습&apos; 칸을 눌러 &apos;없음&apos;으로 바꾸면,
+        숫자는 세션별 가능 인원이에요. 가능한 사람이 없는 세션은 편성 화면에서 게스트를 넣을 수 있어요. 토요일 연습이 없는 주는 &apos;토 연습&apos; 칸을 눌러 &apos;없음&apos;으로 바꾸면,
         팀원은 그 주를 가능/불가로만 답해요.
       </p>
 

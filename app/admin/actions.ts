@@ -8,7 +8,8 @@ import { requireAdmin } from "@/lib/auth";
 import { query, queryOne, transaction } from "@/lib/db";
 import { addDays, isValidMonth, monthStart, todayKST, weekendSets } from "@/lib/dates";
 import { hashPin } from "@/lib/pin";
-import { isSession } from "@/lib/sessions";
+import { parseGuestNames } from "@/lib/lineup";
+import { isSession, SESSIONS } from "@/lib/sessions";
 import type { EventType, MemberStatus } from "@/lib/types";
 
 export async function setMemberStatus(formData: FormData) {
@@ -27,6 +28,37 @@ export async function setMemberRole(formData: FormData) {
   if (id === member.id && role === "member") redirect("/admin/members?error=self");
   await query(`update members set role = $2 where id = $1`, [id, role]);
   revalidatePath("/admin/members");
+}
+
+/**
+ * 계정을 지운다. 응답·임시 배정·로그인 세션은 함께 지워지고,
+ * 이미 확정된 라인업에서는 이름만 남도록 게스트로 바꿔 캘린더 기록을 지킨다.
+ * 본인은 지울 수 없으므로 관리자가 한 명도 없게 되는 일은 없다.
+ */
+export async function deleteMember(formData: FormData) {
+  const { member } = await requireAdmin();
+  const id = String(formData.get("member_id"));
+  if (id === member.id) redirect("/admin/members?error=self-delete");
+
+  const name = await transaction(async (tx) => {
+    const { rows } = await tx.query<{ name: string }>(`select name from members where id = $1`, [id]);
+    if (!rows[0]) return null;
+    await tx.query(
+      `insert into lineup_guests (event_id, session, name)
+       select a.event_id, a.session, m.name
+         from lineup_assignments a
+         join events e on e.id = a.event_id and e.lineup_status = 'confirmed'
+         join members m on m.id = a.member_id
+        where a.member_id = $1`,
+      [id],
+    );
+    await tx.query(`delete from members where id = $1`, [id]);
+    return rows[0].name;
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/calendar");
+  redirect(`/admin/members?deleted=${encodeURIComponent(name ?? "")}`);
 }
 
 /** 임시 PIN을 만들어 관리자 화면에 한 번 보여준다 */
@@ -217,6 +249,12 @@ export async function saveLineup(formData: FormData) {
         [eventId, memberId, session, sunOnly.has(memberId)],
       );
     }
+    await tx.query(`delete from lineup_guests where event_id = $1`, [eventId]);
+    for (const session of SESSIONS) {
+      for (const name of parseGuestNames(String(formData.get(`guests:${session}`) ?? ""))) {
+        await tx.query(`insert into lineup_guests (event_id, session, name) values ($1, $2, $3)`, [eventId, session, name]);
+      }
+    }
     if (intent === "confirm") {
       await tx.query(`update events set lineup_status = 'confirmed', confirmed_at = now() where id = $1`, [eventId]);
     }
@@ -233,4 +271,15 @@ export async function unconfirmLineup(formData: FormData) {
   await query(`update events set lineup_status = 'draft', confirmed_at = null where id = $1`, [eventId]);
   revalidatePath(`/admin/events/${eventId}`);
   revalidatePath("/calendar");
+}
+
+/** 수련회·특별예배 일정을 지운다. 응답·라인업·게스트도 함께 지워진다 (주일 세트는 회차 삭제로) */
+export async function deleteEvent(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("event_id"));
+  await query(`delete from events where id = $1 and round_id is null and type <> 'weekend'`, [id]);
+  revalidatePath("/admin");
+  revalidatePath("/calendar");
+  revalidatePath("/availability");
+  redirect("/admin?deleted=event");
 }

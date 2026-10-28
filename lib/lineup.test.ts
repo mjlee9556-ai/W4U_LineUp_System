@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLineup, capacityWarnings, groupBySession, serviceDates } from "./lineup";
+import { buildLineup, groupBySession, parseGuestNames, serviceDates } from "./lineup";
 import type { LineupEvent } from "./types";
 
 describe("buildLineup / groupBySession", () => {
@@ -30,16 +30,25 @@ describe("serviceDates", () => {
   });
 });
 
-describe("capacityWarnings", () => {
-  it("부족과 초과를 알려준다", () => {
-    const w = capacityWarnings({ leader: 0, drums: 2, vocal: 5 }, [
-      { session: "leader", min: 1, max: 1 },
-      { session: "drums", min: 1, max: 1 },
-      { session: "vocal", min: 0, max: null },
+describe("게스트", () => {
+  it("같은 세션 안에서 팀원 뒤에 붙는다", () => {
+    const entries = buildLineup(
+      [{ event_id: "e", member_id: "a", session: "electric", sat_absent: false }],
+      new Map([["a", "가"]]),
+      [
+        { id: "g1", event_id: "e", session: "electric", name: "손님" },
+        { id: "g2", event_id: "e", session: "leader", name: "외부 인도자" },
+      ],
+    );
+    expect(entries.map((e) => [e.session, e.name, e.guest])).toEqual([
+      ["leader", "외부 인도자", true],
+      ["electric", "가", false],
+      ["electric", "손님", true],
     ]);
-    expect(w.map((x) => [x.session, x.kind])).toEqual([
-      ["leader", "short"],
-      ["drums", "over"],
-    ]);
+  });
+
+  it("이름 입력을 쉼표로 나누고 정리한다", () => {
+    expect(parseGuestNames(" 홍길동 ,김  철수,, 홍길동 ")).toEqual(["홍길동", "김 철수"]);
+    expect(parseGuestNames("")).toEqual([]);
   });
 });

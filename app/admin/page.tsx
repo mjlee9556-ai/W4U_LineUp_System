@@ -6,8 +6,10 @@ import { SESSION_LABELS, type Session } from "@/lib/sessions";
 import { EVENT_TYPE_LABELS, formatAddress, type LineupEvent, type Member, type Round } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { SubmitButton } from "@/components/SubmitButton";
-import { createInviteCode, createRound, createSpecialEvent, deleteInviteCode, setMemberStatus } from "./actions";
+import { createInviteCode, createRound, createSpecialEvent, deleteEvent, deleteInviteCode, setMemberStatus } from "./actions";
 
 const ERRORS: Record<string, string> = {
   month: "월을 다시 골라 주세요.",
@@ -43,7 +45,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         승인된 팀원 {approvedCount}명 · <Link href="/admin/members" className="underline">팀원 관리 (PIN 초기화·관리자 지정)</Link>
       </p>
       <div className="mt-4">
-        <Notice message={deleted === "round" ? "회차를 삭제했어요." : undefined} />
+        <Notice message={deleted === "round" ? "회차를 삭제했어요." : deleted === "event" ? "일정을 삭제했어요." : undefined} />
         <Notice tone="error" message={error ? ERRORS[error] : undefined} />
       </div>
 
@@ -96,9 +98,19 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 <Link href={`/admin/events/${e.id}`} className="hover:underline">
                   {e.title} <span className="text-xs text-stone-500">{EVENT_TYPE_LABELS[e.type]}</span>
                 </Link>
-                <span className="text-xs text-stone-500">
+                <span className="flex items-center gap-2 text-xs text-stone-500">
                   {formatShort(e.start_date)}
                   {e.end_date !== e.start_date && `~${formatShort(e.end_date)}`} · {e.lineup_status === "confirmed" ? "확정" : "편성 중"}
+                  <form action={deleteEvent}>
+                    <input type="hidden" name="event_id" value={e.id} />
+                    <ConfirmSubmitButton
+                      confirmMessage={`'${e.title}' 일정을 삭제할까요?\n\n팀원 응답과 라인업도 함께 지워지고 되돌릴 수 없어요.`}
+                      pendingText="…"
+                      className="text-red-600 hover:underline"
+                    >
+                      삭제
+                    </ConfirmSubmitButton>
+                  </form>
                 </span>
               </li>
             ))}
@@ -147,18 +159,22 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             </div>
             <SubmitButton pendingText="만드는 중…">코드 만들기</SubmitButton>
           </form>
+          <p className="mt-2 text-xs text-stone-500">가입 링크를 단톡방에 공유하면 초대코드가 미리 채워져서, 가입하자마자 바로 승인돼요.</p>
           <ul className="mt-3 divide-y divide-stone-100 text-sm">
             {codes.map((c) => (
-              <li key={c.code} className="flex items-center justify-between py-2">
-                <span className="font-mono">{c.code}</span>
-                <span className="flex items-center gap-2 text-xs text-stone-500">
-                  {c.used_count}/{c.max_uses ?? "∞"}회
-                  {c.expires_at && ` · ${formatShort(c.expires_at.slice(0, 10))}까지`}
-                  <form action={deleteInviteCode}>
-                    <input type="hidden" name="code" value={c.code} />
-                    <button className="text-red-600 hover:underline">삭제</button>
-                  </form>
-                </span>
+              <li key={c.code} className="py-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono">{c.code}</span>
+                  <span className="flex items-center gap-2 text-xs text-stone-500">
+                    {c.used_count}/{c.max_uses ?? "∞"}회
+                    {c.expires_at && ` · ${formatShort(c.expires_at.slice(0, 10))}까지`}
+                    <form action={deleteInviteCode}>
+                      <input type="hidden" name="code" value={c.code} />
+                      <button className="text-red-600 hover:underline">삭제</button>
+                    </form>
+                  </span>
+                </div>
+                <CopyLinkButton path={`/signup?code=${c.code}`} />
               </li>
             ))}
           </ul>

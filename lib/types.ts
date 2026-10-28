@@ -64,7 +64,7 @@ export type Assignment = {
   sat_absent: boolean;
 };
 
-export type SessionRule = { session: Session; min: number; max: number | null };
+export type Guest = { id: string; event_id: string; session: Session; name: string };
 
 /** 거주지 표시용. 예전 가입자는 구·동이 나뉘어 저장돼 있다 */
 export function formatAddress(m: Pick<Member, "district" | "dong">): string {

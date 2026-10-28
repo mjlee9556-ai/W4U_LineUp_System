@@ -7,10 +7,11 @@ import { Notice } from "@/components/Notice";
 import { SubmitButton } from "@/components/SubmitButton";
 import { register } from "./actions";
 
-export default async function SignupPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ error?: string; code?: string }> }) {
   const { member } = await getCurrentMember();
   if (member) redirect(member.status === "approved" ? "/calendar" : "/pending");
-  const { error } = await searchParams;
+  const { error, code } = await searchParams;
+  const inviteCode = (code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
 
   return (
     <div className="mx-auto max-w-md px-4 py-8">
@@ -73,7 +74,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
 
         <div>
           <label className="label" htmlFor="invite_code">초대코드 (선택)</label>
-          <input id="invite_code" name="invite_code" placeholder="없으면 관리자 승인 후 이용" className="input uppercase" autoComplete="off" />
+          <input id="invite_code" name="invite_code" defaultValue={inviteCode} placeholder="없으면 관리자 승인 후 이용" className="input uppercase" autoComplete="off" />
         </div>
 
         <label className="flex gap-2 rounded-lg bg-stone-100 p-3 text-xs leading-relaxed text-stone-700">
