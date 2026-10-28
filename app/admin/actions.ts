@@ -8,8 +8,9 @@ import { requireAdmin } from "@/lib/auth";
 import { query, queryOne, transaction } from "@/lib/db";
 import { addDays, isValidMonth, monthStart, todayKST, weekendSets } from "@/lib/dates";
 import { hashPin } from "@/lib/pin";
+import { autoAssign } from "@/lib/autoassign";
 import { parseGuestNames } from "@/lib/lineup";
-import { isSession, SESSIONS } from "@/lib/sessions";
+import { isSession, SESSIONS, SIGNUP_SESSIONS, type Session } from "@/lib/sessions";
 import type { EventType, MemberStatus } from "@/lib/types";
 
 export async function setMemberStatus(formData: FormData) {
@@ -282,4 +283,79 @@ export async function deleteEvent(formData: FormData) {
   revalidatePath("/calendar");
   revalidatePath("/availability");
   redirect("/admin?deleted=event");
+}
+
+/**
+ * 회차의 편성 중인 주들을 파트별로 자동 배정한다. 확정된 주는 그대로 두고 횟수 계산에만 넣는다.
+ * 편성 중인 주의 팀원 배정은 새로 채우고, 게스트는 남겨 둔다.
+ */
+export async function autoAssignRound(formData: FormData) {
+  await requireAdmin();
+  const roundId = String(formData.get("round_id"));
+  const sessions = SIGNUP_SESSIONS.map((session) => {
+    const n = Number(formData.get(`count:${session}`));
+    return { session, count: Number.isFinite(n) ? Math.min(Math.max(Math.trunc(n), 0), 5) : 1 };
+  });
+
+  await transaction(async (tx) => {
+    const events = (
+      await tx.query<{ id: string; lineup_status: string }>(
+        `select id, lineup_status from events where round_id = $1 and type = 'weekend' order by start_date`,
+        [roundId],
+      )
+    ).rows;
+    const drafts = events.filter((e) => e.lineup_status === "draft");
+    if (!drafts.length) return;
+
+    const ids = events.map((e) => e.id);
+    const answers = (
+      await tx.query<{ event_id: string; member_id: string; status: string; sessions: Session[] }>(
+        `select a.event_id, a.member_id, a.status, a.sessions
+           from availabilities a join members m on m.id = a.member_id and m.status = 'approved'
+          where a.event_id = any($1::uuid[]) and a.status <> 'none'`,
+        [ids],
+      )
+    ).rows;
+    const fixed = (
+      await tx.query<{ event_id: string; member_id: string; session: Session }>(
+        `select a.event_id, a.member_id, a.session
+           from lineup_assignments a join events e on e.id = a.event_id
+          where e.round_id = $1 and e.lineup_status = 'confirmed'`,
+        [roundId],
+      )
+    ).rows;
+
+    const rows = autoAssign({
+      events: drafts,
+      sessions,
+      candidates: (eventId, session) =>
+        answers.filter((a) => a.event_id === eventId && a.sessions.includes(session)).map((a) => a.member_id),
+      fixed: fixed.map((f) => ({ eventId: f.event_id, memberId: f.member_id, session: f.session })),
+    });
+
+    const sunOnly = new Set(answers.filter((a) => a.status === "sun_only").map((a) => `${a.event_id}:${a.member_id}`));
+    await tx.query(`delete from lineup_assignments where event_id = any($1::uuid[])`, [drafts.map((e) => e.id)]);
+    for (const r of rows) {
+      await tx.query(
+        `insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)`,
+        [r.eventId, r.memberId, r.session, sunOnly.has(`${r.eventId}:${r.memberId}`)],
+      );
+    }
+  });
+
+  revalidatePath(`/admin/rounds/${roundId}`);
+  redirect(`/admin/rounds/${roundId}?saved=auto`);
+}
+
+/** 회차의 편성 중인 주를 한 번에 확정하고 공개한다 */
+export async function confirmRound(formData: FormData) {
+  await requireAdmin();
+  const roundId = String(formData.get("round_id"));
+  await query(
+    `update events set lineup_status = 'confirmed', confirmed_at = now() where round_id = $1 and lineup_status = 'draft'`,
+    [roundId],
+  );
+  revalidatePath(`/admin/rounds/${roundId}`);
+  revalidatePath("/calendar");
+  redirect(`/admin/rounds/${roundId}?saved=confirm`);
 }
