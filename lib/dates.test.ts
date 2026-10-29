@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarGrid, formatShort, shiftMonth, weekendSets } from "./dates";
+import { calendarGrid, formatShort, isCommunionSunday, shiftMonth, weekendSets } from "./dates";
 
 describe("weekendSets", () => {
   it("2026년 12월은 일요일 4번", () => {
@@ -36,5 +36,14 @@ describe("helpers", () => {
   });
   it("formatShort", () => {
     expect(formatShort("2026-12-06")).toBe("12/6(일)");
+  });
+});
+
+describe("isCommunionSunday", () => {
+  it("매월 첫째 일요일만", () => {
+    expect(isCommunionSunday("2026-11-01")).toBe(true);
+    expect(isCommunionSunday("2026-11-08")).toBe(false);
+    expect(isCommunionSunday("2026-12-06")).toBe(true);
+    expect(isCommunionSunday("2026-12-05")).toBe(false); // 토요일
   });
 });

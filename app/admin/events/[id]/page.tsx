@@ -66,7 +66,8 @@ export default async function EventLineupPage({
       <p className="mt-1 text-sm text-stone-600">
         {EVENT_TYPE_LABELS[event.type]} · {days.map((d) => `${formatShort(d.date)} ${d.kind === "practice" ? "연습" : "예배"}`).join(", ")}
         {" · "}
-        {confirmed ? "확정됨" : "편성 중"} · 가능 {available.length}명
+        {confirmed ? "확정됨" : "편성 중"} · 가능 {available.length}명 ·{" "}
+        <Link href={`/events/${event.id}`} className="underline-offset-2 hover:underline">콘티·악보</Link>
       </p>
 
       <div className="mt-4">

@@ -9,6 +9,8 @@ import { Notice } from "@/components/Notice";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { SubmitButton } from "@/components/SubmitButton";
+import { DEFAULT_COMMUNION_NOTICE, getSetting } from "@/lib/setlist";
+import { saveCommunionNotice } from "../events/[id]/actions";
 import { createInviteCode, createRound, createSpecialEvent, deleteEvent, deleteInviteCode, setMemberStatus } from "./actions";
 
 const ERRORS: Record<string, string> = {
@@ -20,9 +22,9 @@ const ERRORS: Record<string, string> = {
 
 type InviteCode = { code: string; expires_at: string | null; max_uses: number | null; used_count: number };
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ error?: string; deleted?: string }> }) {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ error?: string; deleted?: string; saved?: string }> }) {
   const { member } = await requireAdmin();
-  const { error, deleted } = await searchParams;
+  const { error, deleted, saved } = await searchParams;
 
   const [pending, codes, rounds, specials, [{ count: approvedCount }]] = await Promise.all([
     query<Member & { sessions: Session[] }>(
@@ -35,6 +37,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     query<LineupEvent>(`select * from events where round_id is null and end_date >= $1 order by start_date`, [todayKST()]),
     query<{ count: number }>(`select count(*)::int as count from members where status = 'approved'`),
   ]);
+  const communionNotice = await getSetting("communion_notice", DEFAULT_COMMUNION_NOTICE);
 
   const nextMonth = shiftMonth(todayKST().slice(0, 7), 1);
 
@@ -45,7 +48,17 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         승인된 팀원 {approvedCount}명 · <Link href="/admin/members" className="underline">팀원 관리 (PIN 초기화·관리자 지정)</Link>
       </p>
       <div className="mt-4">
-        <Notice message={deleted === "round" ? "회차를 삭제했어요." : deleted === "event" ? "일정을 삭제했어요." : undefined} />
+        <Notice
+          message={
+            deleted === "round"
+              ? "회차를 삭제했어요."
+              : deleted === "event"
+                ? "일정을 삭제했어요."
+                : saved === "notice"
+                  ? "성찬식 공지를 저장했어요."
+                  : undefined
+          }
+        />
         <Notice tone="error" message={error ? ERRORS[error] : undefined} />
       </div>
 
@@ -178,6 +191,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               </li>
             ))}
           </ul>
+        </section>
+        <section className="card md:col-span-2">
+          <h2 className="font-semibold">성찬식 주일 공지</h2>
+          <p className="mt-1 text-xs text-stone-500">매월 첫째 주일에 캘린더와 주차 화면에 &apos;성찬식&apos; 표시와 함께 나와요. 비우고 저장하면 기본 문구로 돌아가요.</p>
+          <form action={saveCommunionNotice} className="mt-3 flex gap-2">
+            <input name="notice" defaultValue={communionNotice} maxLength={200} aria-label="성찬식 공지" className="input" />
+            <SubmitButton className="btn-primary shrink-0">저장</SubmitButton>
+          </form>
         </section>
       </div>
     </AppShell>
