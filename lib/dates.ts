@@ -88,3 +88,9 @@ export function formatMonth(month: string): string {
 }
 
 export { WEEKDAYS };
+
+/** 매월 첫째 주일(성찬식) */
+export function isCommunionSunday(date: string): boolean {
+  const d = parseISODate(date);
+  return d.getUTCDay() === 0 && d.getUTCDate() <= 7;
+}

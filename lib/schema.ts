@@ -98,4 +98,35 @@ create table if not exists lineup_guests (
   name text not null
 );
 create index if not exists lineup_guests_event_idx on lineup_guests (event_id);
+
+-- 주차별 콘티(곡 목록)
+create table if not exists setlist_songs (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references events (id) on delete cascade,
+  position int not null default 0,
+  title text not null,
+  youtube_url text,
+  song_key text,          -- 키 (예: G, A→B)
+  sheet_url text,         -- 악보 링크 (구글 드라이브 등)
+  created_at timestamptz not null default now()
+);
+create index if not exists setlist_songs_event_idx on setlist_songs (event_id, position);
+
+-- 곡에 올린 악보 파일 (사진·PDF). 따로 저장소 없이 DB에 둔다
+create table if not exists sheet_files (
+  id uuid primary key default gen_random_uuid(),
+  song_id uuid not null references setlist_songs (id) on delete cascade,
+  filename text not null,
+  content_type text not null,
+  size int not null,
+  data bytea not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists sheet_files_song_idx on sheet_files (song_id);
+
+-- 관리자가 고치는 문구 (예: 성찬식 공지)
+create table if not exists app_settings (
+  key text primary key,
+  value text not null
+);
 `;
