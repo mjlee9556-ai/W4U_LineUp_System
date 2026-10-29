@@ -85,6 +85,9 @@ export default async function AvailabilityPage({
                     </label>
                   ))}
                 </div>
+                {hasSaturdayPractice(event) && (
+                  <p className="mt-1.5 text-xs text-stone-500">토 연습에 못 오면(&apos;토 불가&apos;) 이 주는 라인업에 들어가지 않아요.</p>
+                )}
 
                 <details className="mt-3" open={!answer}>
                   <summary className="cursor-pointer text-xs text-stone-500">

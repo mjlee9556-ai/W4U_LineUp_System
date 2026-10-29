@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentMember } from "@/lib/auth";
 import { PIN_PATTERN } from "@/lib/pin";
+import { PhoneInput } from "@/components/PhoneInput";
 import { SubmitButton } from "@/components/SubmitButton";
 import { login } from "./actions";
 
@@ -23,8 +24,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
       <form action={login} className="mt-6 space-y-3">
         <div>
-          <label className="label" htmlFor="phone">전화번호</label>
-          <input id="phone" name="phone" type="tel" inputMode="numeric" required autoComplete="tel" placeholder="010-0000-0000" className="input" />
+          <label className="label" htmlFor="phone">전화번호 (- 없이 숫자만)</label>
+          <PhoneInput />
         </div>
         <div>
           <label className="label" htmlFor="pin">PIN (숫자 4~6자리)</label>

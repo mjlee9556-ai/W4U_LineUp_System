@@ -6,7 +6,7 @@ import { getMemberNames, withDays } from "@/lib/queries";
 import { buildLineup, groupBySession } from "@/lib/lineup";
 import { formatMonth, formatShort } from "@/lib/dates";
 import { SESSION_LABELS, SESSION_SHORT, SIGNUP_SESSIONS } from "@/lib/sessions";
-import { hasSaturdayPractice, type Assignment, type Availability, type Guest, type LineupEvent, type Member, type Round } from "@/lib/types";
+import { canServe, hasSaturdayPractice, type Assignment, type Availability, type Guest, type LineupEvent, type Member, type Round } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { Notice } from "@/components/Notice";
@@ -60,8 +60,10 @@ export default async function RoundPage({
   );
   // 사람·세션별 가능한 주 수 (섬김 횟수 표의 분모)
   const availableWeeks = new Map<string, number>();
+  const eventById = new Map(events.map((e) => [e.id, e]));
   for (const a of answers) {
-    if (a.status === "none") continue;
+    const ev = eventById.get(a.event_id);
+    if (!ev || !canServe(a.status, ev)) continue;
     for (const s of a.sessions) availableWeeks.set(`${a.member_id}:${s}`, (availableWeeks.get(`${a.member_id}:${s}`) ?? 0) + 1);
   }
   const draftCount = events.filter((e) => e.lineup_status === "draft").length;
@@ -111,7 +113,8 @@ export default async function RoundPage({
           </thead>
           <tbody className="divide-y divide-stone-100">
             {events.map((e) => {
-              const available = answers.filter((a) => a.event_id === e.id && a.status !== "none");
+              const answered = answers.filter((a) => a.event_id === e.id);
+              const available = answered.filter((a) => canServe(a.status, e));
               return (
                 <tr key={e.id}>
                   <td className="whitespace-nowrap px-2 py-2 text-left">{formatShort(e.end_date)}</td>
@@ -121,7 +124,7 @@ export default async function RoundPage({
                       <td key={s} className={`px-2 py-2 ${count === 0 ? "text-stone-300" : ""}`}>{count}</td>
                     );
                   })}
-                  <td className="px-2 py-2 text-stone-500">{available.filter((a) => a.status === "sun_only").length}</td>
+                  <td className="px-2 py-2 text-stone-500">{answered.filter((a) => a.status === "sun_only").length}</td>
                   <td className="whitespace-nowrap px-2 py-2">
                     {e.lineup_status === "draft" ? (
                       <form action={toggleSaturdayPractice}>
@@ -150,14 +153,14 @@ export default async function RoundPage({
         </table>
       </div>
       <p className="mt-2 text-xs text-stone-500">
-        숫자는 세션별 가능 인원이에요. 가능한 사람이 없는 세션은 편성 화면에서 게스트를 넣을 수 있어요. 토요일 연습이 없는 주는 &apos;토 연습&apos; 칸을 눌러 &apos;없음&apos;으로 바꾸면,
+        숫자는 세션별로 편성할 수 있는 인원이에요 (토 연습이 있는 주의 &apos;토 불가&apos;는 빼고 세요). 가능한 사람이 없는 세션은 편성 화면에서 게스트를 넣을 수 있어요. 토요일 연습이 없는 주는 &apos;토 연습&apos; 칸을 눌러 &apos;없음&apos;으로 바꾸면,
         팀원은 그 주를 가능/불가로만 답해요.
       </p>
 
       <section className="card mt-6">
         <h2 className="font-semibold">자동 배정</h2>
         <p className="mt-1 text-sm text-stone-600">
-          파트마다 가능하다고 답한 주에만, 한 달 섬김 횟수가 고르게 되도록 나눠 넣어요. 토 불가인 사람도 넣고 &apos;토 불참&apos;으로 표시해요. 한 사람은 한 주에 한 파트만 넣어요.
+          파트마다 가능하다고 답한 주에만, 한 달 섬김 횟수가 고르게 되도록 나눠 넣어요. &apos;토 불가&apos;인 사람은 토 연습이 없는 주에만 넣어요. 한 사람은 한 주에 한 파트만 넣어요.
           확정된 주는 바꾸지 않고 횟수에만 셈해요.
         </p>
         <form action={autoAssignRound} className="mt-3">
