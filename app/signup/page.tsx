@@ -4,6 +4,7 @@ import { SESSION_LABELS, SIGNUP_SESSIONS } from "@/lib/sessions";
 import { PIN_PATTERN } from "@/lib/pin";
 import Link from "next/link";
 import { Notice } from "@/components/Notice";
+import { PhoneInput } from "@/components/PhoneInput";
 import { SubmitButton } from "@/components/SubmitButton";
 import { register } from "./actions";
 
@@ -28,8 +29,8 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
         </div>
 
         <div>
-          <label className="label" htmlFor="phone">전화번호 (로그인 아이디)</label>
-          <input id="phone" name="phone" type="tel" inputMode="numeric" required autoComplete="tel" placeholder="010-0000-0000" className="input" />
+          <label className="label" htmlFor="phone">전화번호 (로그인 아이디, - 없이 숫자만)</label>
+          <PhoneInput />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -55,12 +56,13 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
           </div>
         </fieldset>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
+        {/* iOS Safari의 날짜 칸은 최소 너비가 있어 좁은 2칸 배치에서 옆 칸과 겹친다 → 모바일은 한 줄씩 */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="min-w-0">
             <label className="label" htmlFor="birth_date">생년월일</label>
             <input id="birth_date" name="birth_date" type="date" required className="input" />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="label" htmlFor="email">이메일 (선택)</label>
             <input id="email" name="email" type="email" className="input" />
           </div>

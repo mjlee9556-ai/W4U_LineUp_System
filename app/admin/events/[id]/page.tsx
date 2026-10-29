@@ -5,7 +5,7 @@ import { query, queryOne } from "@/lib/db";
 import { withDays } from "@/lib/queries";
 import { formatShort } from "@/lib/dates";
 import { SESSION_LABELS, SESSIONS } from "@/lib/sessions";
-import { EVENT_TYPE_LABELS, type Assignment, type Availability, type LineupEvent, type Guest, type Member } from "@/lib/types";
+import { canServe, EVENT_TYPE_LABELS, type Assignment, type Availability, type LineupEvent, type Guest, type Member } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -48,8 +48,10 @@ export default async function EventLineupPage({
 
   const available = members.filter((m) => {
     const a = answers.get(m.id);
-    return a && a.status !== "none";
+    return a && canServe(a.status, event);
   });
+  // 토 연습이 있는 주의 '토 불가' 응답자: 이번 주는 편성할 수 없다
+  const satBlocked = members.filter((m) => answers.get(m.id)?.status === "sun_only" && !canServe("sun_only", event));
   const confirmed = event.lineup_status === "confirmed";
   const days = (event.event_days ?? []).sort((a, b) => a.date.localeCompare(b.date));
 
@@ -98,6 +100,7 @@ export default async function EventLineupPage({
               return s.includes(session === "sub_leader" ? "leader" : session);
             };
             const primary = available.filter(wants);
+            const blockedHere = satBlocked.filter(wants);
             const others = available.filter((m) => !wants(m));
             const assignedCount = assignments.filter((a) => a.session === session).length;
             const sessionGuests = guests.filter((g) => g.session === session).map((g) => g.name);
@@ -114,7 +117,6 @@ export default async function EventLineupPage({
                   />
                   <span className="chip" title={a.comment ?? undefined}>
                     {m.name}
-                    {a.status === "sun_only" && <span className="ml-1 text-xs opacity-70">토 불가</span>}
                     {a.comment && <span className="ml-1 text-xs opacity-70">💬</span>}
                   </span>
                 </label>
@@ -131,6 +133,12 @@ export default async function EventLineupPage({
                 <div className="mt-2 flex flex-wrap gap-2">
                   {primary.length ? primary.map(renderOption) : <span className="text-sm text-stone-400">가능한 사람이 없어요</span>}
                 </div>
+                {blockedHere.length > 0 && (
+                  <p className="mt-2 text-xs text-stone-500">
+                    토 불가라 이번 주는 편성할 수 없어요: {blockedHere.map((m) => m.name).join(", ")}
+                    <span className="text-stone-400"> (토 연습이 없는 주로 바꾸면 편성할 수 있어요)</span>
+                  </p>
+                )}
                 {others.length > 0 && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs text-stone-500">다른 세션으로 응답한 가능자 {others.length}명</summary>

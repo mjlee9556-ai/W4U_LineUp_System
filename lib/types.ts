@@ -88,6 +88,20 @@ export const SPECIAL_STATUS_OPTIONS: { value: AvailabilityStatus; label: string 
   { value: "none", label: "불가" },
 ];
 
+/**
+ * 편성할 수 있는 응답인지. '토 불가'는 토 연습이 있는 주에는 편성하지 않는다
+ * (연습 없는 주로 바꾸면 '토 불가' 응답은 '가능'으로 바뀐다)
+ */
+export function canServe(status: AvailabilityStatus, event: LineupEvent): boolean {
+  if (status === "none") return false;
+  if (status === "sun_only") return !hasSaturdayPractice(event);
+  return true;
+}
+
+/** SQL용 같은 규칙 (availabilities a 기준) */
+export const CAN_SERVE_SQL = `a.status <> 'none' and not (a.status = 'sun_only' and exists (
+  select 1 from event_days d where d.event_id = a.event_id and d.kind = 'practice'))`;
+
 /** 토 연습이 있는 주일만 토·일을 나눠 묻고, 연습 없는 주일과 비주말 일정은 가능/불가로 받는다 */
 export function hasSaturdayPractice(event: LineupEvent): boolean {
   return event.type === "weekend" && (event.event_days ?? []).some((d) => d.kind === "practice");

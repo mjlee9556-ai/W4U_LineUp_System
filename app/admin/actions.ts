@@ -11,7 +11,7 @@ import { hashPin } from "@/lib/pin";
 import { autoAssign } from "@/lib/autoassign";
 import { parseGuestNames } from "@/lib/lineup";
 import { isSession, SESSIONS, SIGNUP_SESSIONS, type Session } from "@/lib/sessions";
-import type { EventType, MemberStatus } from "@/lib/types";
+import { CAN_SERVE_SQL, type EventType, type MemberStatus } from "@/lib/types";
 
 export async function setMemberStatus(formData: FormData) {
   await requireAdmin();
@@ -235,20 +235,23 @@ export async function saveLineup(formData: FormData) {
     .filter(([session, memberId]) => isSession(session) && !!memberId);
 
   await transaction(async (tx) => {
-    const sunOnly = new Set(
+    // 토 연습이 있는 주의 '토 불가' 응답자는 편성하지 않는다
+    const blocked = new Set(
       (
         await tx.query<{ member_id: string }>(
-          `select member_id from availabilities where event_id = $1 and status = 'sun_only'`,
+          `select a.member_id from availabilities a where a.event_id = $1 and not (${CAN_SERVE_SQL})`,
           [eventId],
         )
       ).rows.map((r) => r.member_id),
     );
     await tx.query(`delete from lineup_assignments where event_id = $1`, [eventId]);
     for (const [session, memberId] of picks) {
-      await tx.query(
-        `insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)`,
-        [eventId, memberId, session, sunOnly.has(memberId)],
-      );
+      if (blocked.has(memberId)) continue;
+      await tx.query(`insert into lineup_assignments (event_id, member_id, session) values ($1, $2, $3)`, [
+        eventId,
+        memberId,
+        session,
+      ]);
     }
     await tx.query(`delete from lineup_guests where event_id = $1`, [eventId]);
     for (const session of SESSIONS) {
@@ -312,7 +315,7 @@ export async function autoAssignRound(formData: FormData) {
       await tx.query<{ event_id: string; member_id: string; status: string; sessions: Session[] }>(
         `select a.event_id, a.member_id, a.status, a.sessions
            from availabilities a join members m on m.id = a.member_id and m.status = 'approved'
-          where a.event_id = any($1::uuid[]) and a.status <> 'none'`,
+          where a.event_id = any($1::uuid[]) and ${CAN_SERVE_SQL}`,
         [ids],
       )
     ).rows;
@@ -333,13 +336,13 @@ export async function autoAssignRound(formData: FormData) {
       fixed: fixed.map((f) => ({ eventId: f.event_id, memberId: f.member_id, session: f.session })),
     });
 
-    const sunOnly = new Set(answers.filter((a) => a.status === "sun_only").map((a) => `${a.event_id}:${a.member_id}`));
     await tx.query(`delete from lineup_assignments where event_id = any($1::uuid[])`, [drafts.map((e) => e.id)]);
     for (const r of rows) {
-      await tx.query(
-        `insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)`,
-        [r.eventId, r.memberId, r.session, sunOnly.has(`${r.eventId}:${r.memberId}`)],
-      );
+      await tx.query(`insert into lineup_assignments (event_id, member_id, session) values ($1, $2, $3)`, [
+        r.eventId,
+        r.memberId,
+        r.session,
+      ]);
     }
   });
 

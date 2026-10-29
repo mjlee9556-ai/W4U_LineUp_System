@@ -24,7 +24,7 @@ body {
     @apply btn border border-stone-300 bg-white text-stone-800 hover:bg-stone-100;
 }
 @utility input {
-    @apply w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm focus:border-stone-500 focus:outline-none;
+    @apply w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm focus:border-stone-500 focus:outline-none;
 }
 @utility label {
     @apply mb-1 block text-sm font-medium text-stone-700;
@@ -32,4 +32,14 @@ body {
 /* 라디오·체크박스를 칩처럼 보이게 */
 @utility chip {
     @apply cursor-pointer select-none rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 peer-checked:border-stone-900 peer-checked:bg-stone-900 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-stone-400;
+}
+
+/* iOS Safari: 날짜 칸이 기본 모양·최소 너비 때문에 칸 밖으로 넘치거나 높이가 달라지는 것을 막는다 */
+input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 2.375rem;
+}
+input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
 }
