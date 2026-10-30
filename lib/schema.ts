@@ -111,6 +111,9 @@ create table if not exists setlist_songs (
   created_at timestamptz not null default now()
 );
 create index if not exists setlist_songs_event_idx on setlist_songs (event_id, position);
+-- 곡마다 송폼(예: I V1 C V2 C B C)과 인도자 메모
+alter table setlist_songs add column if not exists song_form text;
+alter table setlist_songs add column if not exists memo text;
 
 -- 곡에 올린 악보 파일 (사진·PDF). 따로 저장소 없이 DB에 둔다
 create table if not exists sheet_files (

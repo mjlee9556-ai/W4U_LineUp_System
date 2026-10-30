@@ -12,9 +12,10 @@ import { AppShell } from "@/components/AppShell";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { Notice } from "@/components/Notice";
 import { SheetUpload } from "@/components/SheetUpload";
+import { SetlistDraft } from "@/components/SetlistDraft";
 import { SongFields } from "@/components/SongFields";
 import { SubmitButton } from "@/components/SubmitButton";
-import { addSong, deleteSheet, deleteSong, moveSong, updateSong, uploadSheet } from "./actions";
+import { addSongs, deleteSheet, deleteSong, moveSong, updateSong, uploadSheet } from "./actions";
 
 const ERRORS: Record<string, string> = {
   title: "곡 제목을 입력해 주세요. (유튜브 제목을 가져오지 못했을 때는 직접 적어 주세요)",
@@ -133,6 +134,8 @@ export default async function EventPage({
                       {song.title}
                       {song.song_key && <span className="ml-2 rounded bg-amber-100 px-1.5 text-xs font-semibold text-amber-900">{song.song_key}</span>}
                     </div>
+                    {song.song_form && <div className="mt-1 font-mono text-xs text-stone-700">{song.song_form}</div>}
+                    {song.memo && <p className="mt-1 whitespace-pre-line text-xs text-stone-600">{song.memo}</p>}
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
                       {song.youtube_url && (
                         <a href={song.youtube_url} target="_blank" rel="noopener noreferrer" className="text-red-700 underline-offset-2 hover:underline">
@@ -217,13 +220,7 @@ export default async function EventPage({
         )}
 
         {canEdit && (
-          <form id="add-song" action={addSong} className="card mt-3 scroll-mt-4 space-y-2">
-            <h3 className="text-sm font-semibold">곡 추가</h3>
-            <input type="hidden" name="event_id" value={id} />
-            <SongFields />
-            <p className="text-xs text-stone-500">악보 사진·PDF는 곡을 추가한 뒤 &apos;악보 올리기&apos;로 붙일 수 있어요 (파일 하나 4MB까지).</p>
-            <SubmitButton pendingText="추가 중…">곡 추가</SubmitButton>
-          </form>
+          <SetlistDraft key={songs.length} eventId={id} initialRows={songs.length === 0 ? 5 : 1} action={addSongs} />
         )}
       </section>
     </AppShell>
