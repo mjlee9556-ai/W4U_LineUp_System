@@ -21,12 +21,34 @@ async function eventOfSong(songId: string) {
   return row.event_id;
 }
 
-const text = (formData: FormData, key: string, max: number) =>
-  String(formData.get(key) ?? "").trim().replace(/\s+/g, " ").slice(0, max) || null;
+const text = (formData: FormData, key: string, max: number) => clean(formData.get(key), max);
+
+const clean = (v: FormDataEntryValue | null | undefined, max: number) =>
+  String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max) || null;
+
+/** 메모는 줄바꿈을 살린다 */
+const multiline = (v: FormDataEntryValue | null | undefined, max: number) =>
+  String(v ?? "").replace(/\r\n?/g, "\n").trim().slice(0, max) || null;
+
+/** 콘티 작성 폼의 곡 칸들. 칸마다 같은 이름의 입력이 있어서 getAll 순서가 곧 칸 순서다 */
+function parseSongRows(formData: FormData) {
+  const titles = formData.getAll("title");
+  return titles.map((title, i) => ({
+    title: clean(title, 200),
+    youtube_url: clean(formData.getAll("youtube_url")[i], 500),
+    song_key: clean(formData.getAll("song_key")[i], 20),
+    sheet_url: clean(formData.getAll("sheet_url")[i], 500),
+    song_form: clean(formData.getAll("song_form")[i], 200),
+    memo: multiline(formData.getAll("memo")[i], 1000),
+  }));
+}
 
 /** 링크 칸은 http(s)만 받는다 */
 function link(formData: FormData, key: string): string | null {
-  const v = text(formData, key, 500);
+  return safeLink(text(formData, key, 500));
+}
+
+function safeLink(v: string | null): string | null {
   if (!v) return null;
   try {
     const url = new URL(v.startsWith("http") ? v : `https://${v}`);
@@ -44,20 +66,42 @@ export async function lookupYoutube(input: string): Promise<{ url: string | null
   return { url: youtubeWatchUrl(id), title: await fetchYoutubeTitle(id) };
 }
 
-export async function addSong(formData: FormData) {
+/** 콘티 작성 폼의 여러 곡 칸을 한 번에 저장한다. 모든 칸이 빈 곡은 건너뛴다 */
+export async function addSongs(formData: FormData) {
   const eventId = String(formData.get("event_id"));
   await requireEditor(eventId);
 
-  const ytId = youtubeId(String(formData.get("youtube_url") ?? ""));
-  let title = text(formData, "title", 200);
-  if (!title && ytId) title = await fetchYoutubeTitle(ytId);
-  if (!title) back(eventId, "?error=title#add-song");
-
-  await query(
-    `insert into setlist_songs (event_id, position, title, youtube_url, song_key, sheet_url)
-     values ($1, coalesce((select max(position) + 1 from setlist_songs where event_id = $1), 0), $2, $3, $4, $5)`,
-    [eventId, title, ytId ? youtubeWatchUrl(ytId) : null, text(formData, "song_key", 20), link(formData, "sheet_url")],
+  const rows = parseSongRows(formData);
+  const songs = await Promise.all(
+    rows
+      .filter((r) => Object.values(r).some(Boolean))
+      .map(async (r) => {
+        const ytId = youtubeId(r.youtube_url ?? "");
+        return {
+          ...r,
+          title: r.title ?? (ytId ? await fetchYoutubeTitle(ytId) : null),
+          youtube_url: ytId ? youtubeWatchUrl(ytId) : null,
+          sheet_url: safeLink(r.sheet_url),
+        };
+      }),
   );
+  if (!songs.length) back(eventId, "#add-song");
+  if (songs.some((s) => !s.title)) back(eventId, "?error=title#add-song");
+
+  await transaction(async (tx) => {
+    const { rows: max } = await tx.query<{ next: number }>(
+      `select coalesce(max(position) + 1, 0) as next from setlist_songs where event_id = $1`,
+      [eventId],
+    );
+    let position = Number(max[0]?.next ?? 0);
+    for (const s of songs) {
+      await tx.query(
+        `insert into setlist_songs (event_id, position, title, youtube_url, song_key, sheet_url, song_form, memo)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [eventId, position++, s.title, s.youtube_url, s.song_key, s.sheet_url, s.song_form, s.memo],
+      );
+    }
+  });
   revalidatePath(`/events/${eventId}`);
   back(eventId, "#add-song");
 }
@@ -66,12 +110,21 @@ export async function updateSong(formData: FormData) {
   const songId = String(formData.get("song_id"));
   const eventId = await eventOfSong(songId);
   await requireEditor(eventId);
-  const title = text(formData, "title", 200);
-  if (!title) back(eventId, "?error=title");
   const ytId = youtubeId(String(formData.get("youtube_url") ?? ""));
+  let title = text(formData, "title", 200);
+  if (!title && ytId) title = await fetchYoutubeTitle(ytId);
+  if (!title) back(eventId, "?error=title");
   await query(
-    `update setlist_songs set title = $2, youtube_url = $3, song_key = $4, sheet_url = $5 where id = $1`,
-    [songId, title, ytId ? youtubeWatchUrl(ytId) : null, text(formData, "song_key", 20), link(formData, "sheet_url")],
+    `update setlist_songs set title = $2, youtube_url = $3, song_key = $4, sheet_url = $5, song_form = $6, memo = $7 where id = $1`,
+    [
+      songId,
+      title,
+      ytId ? youtubeWatchUrl(ytId) : null,
+      text(formData, "song_key", 20),
+      link(formData, "sheet_url"),
+      text(formData, "song_form", 200),
+      multiline(formData.get("memo"), 1000),
+    ],
   );
   revalidatePath(`/events/${eventId}`);
   back(eventId, `#song-${songId}`);

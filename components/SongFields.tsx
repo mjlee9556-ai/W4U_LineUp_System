@@ -3,14 +3,18 @@
 import { useRef, useState, useTransition } from "react";
 import { lookupYoutube } from "@/app/events/[id]/actions";
 
-/** 곡 입력칸: 유튜브 링크를 넣으면 제목을 자동으로 채우고, 채운 제목은 고칠 수 있다 */
-export function SongFields({
-  defaults,
-}: {
-  defaults?: { title?: string; youtube_url?: string | null; song_key?: string | null; sheet_url?: string | null };
-}) {
+export type SongDefaults = {
+  title?: string;
+  youtube_url?: string | null;
+  song_key?: string | null;
+  sheet_url?: string | null;
+  song_form?: string | null;
+  memo?: string | null;
+};
+
+/** 곡 입력칸: 유튜브 링크를 새로 넣거나 바꾸면 그 영상 제목으로 곡 제목을 채운다. 채운 제목은 고칠 수 있다 */
+export function SongFields({ defaults }: { defaults?: SongDefaults }) {
   const titleRef = useRef<HTMLInputElement>(null);
-  const lastAuto = useRef<string | null>(null);
   const lastUrl = useRef(defaults?.youtube_url ?? "");
   const [status, setStatus] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -21,17 +25,11 @@ export function SongFields({
     lastUrl.current = url;
     start(async () => {
       const { url: normalized, title } = await lookupYoutube(url);
+      if (lastUrl.current !== url) return; // 그 사이 다른 링크로 바뀜
       if (!normalized) return setStatus("유튜브 링크가 아닌 것 같아요.");
       if (!title) return setStatus("제목을 가져오지 못했어요. 직접 입력해 주세요.");
-      const input = titleRef.current;
-      // 비어 있거나 전에 자동으로 채운 제목일 때만 덮어쓴다
-      if (input && (!input.value.trim() || input.value === lastAuto.current)) {
-        input.value = title;
-        lastAuto.current = title;
-        setStatus("영상 제목을 가져왔어요. 필요하면 고쳐 주세요.");
-      } else {
-        setStatus(`영상 제목: ${title}`);
-      }
+      if (titleRef.current) titleRef.current.value = title;
+      setStatus("영상 제목으로 바꿨어요. 필요하면 고쳐 주세요.");
     });
   }
 
@@ -67,6 +65,23 @@ export function SongFields({
         placeholder="악보 링크 (선택)"
         aria-label="악보 링크"
         className="input"
+      />
+      <input
+        name="song_form"
+        defaultValue={defaults?.song_form ?? ""}
+        placeholder="송폼 (예: I V1 C V2 C B C)"
+        aria-label="송폼"
+        maxLength={200}
+        className="input sm:col-span-2"
+      />
+      <textarea
+        name="memo"
+        defaultValue={defaults?.memo ?? ""}
+        placeholder="메모 (선택)"
+        aria-label="메모"
+        maxLength={1000}
+        rows={2}
+        className="input sm:col-span-2"
       />
     </div>
   );
