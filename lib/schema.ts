@@ -132,4 +132,9 @@ create table if not exists app_settings (
   key text primary key,
   value text not null
 );
+
+-- 잠시 있었던 방송/음향·미디어/자막 세션은 찬양팀 사역이 아니어서 정리한다
+delete from member_sessions where session in ('sound', 'media');
+update availabilities set sessions = array_remove(array_remove(sessions, 'sound'), 'media')
+ where sessions && array['sound', 'media'];
 `;

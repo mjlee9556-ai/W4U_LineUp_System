@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { query, queryOne } from "@/lib/db";
-import type { Session } from "@/lib/sessions";
+import { isSession, type Session } from "@/lib/sessions";
 import type { Member } from "@/lib/types";
 
 export const SESSION_COOKIE = "j4u_session";
@@ -51,7 +51,7 @@ export async function getCurrentMember() {
   if (!member) return { member: null, sessions: [] as Session[] };
 
   const rows = await query<{ session: Session }>(`select session from member_sessions where member_id = $1`, [member.id]);
-  return { member, sessions: rows.map((r) => r.session) };
+  return { member, sessions: rows.map((r) => r.session).filter(isSession) };
 }
 
 /** 승인된 팀원만 통과. 아니면 알맞은 화면으로 보낸다 */

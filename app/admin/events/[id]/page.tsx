@@ -56,7 +56,7 @@ export default async function EventLineupPage({
   const days = (event.event_days ?? []).sort((a, b) => a.date.localeCompare(b.date));
 
   return (
-    <AppShell member={member}>
+    <AppShell member={member} wide>
       <Link href={event.round_id ? `/admin/rounds/${event.round_id}` : "/admin"} className="text-sm text-stone-500 hover:underline">
         ← 응답 현황
       </Link>

@@ -59,8 +59,8 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
   const inviteCode = (code ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
 
   return (
-    <div className="min-h-dvh bg-white">
-      <header className="sticky top-0 z-10 border-b border-stone-200 bg-white/95 backdrop-blur">
+    <div className="min-h-dvh">
+      <header className="sticky top-0 z-10 border-b border-stone-200/70 bg-white/80 backdrop-blur">
         <div className="mx-auto grid h-14 max-w-md grid-cols-[2.5rem_1fr_2.5rem] items-center px-4">
           <Link href="/login" aria-label="뒤로" className="-ml-1 p-1 text-stone-900">
             <ArrowLeftIcon size={22} />

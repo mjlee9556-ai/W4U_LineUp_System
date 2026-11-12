@@ -26,7 +26,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
   );
 
   return (
-    <AppShell member={me}>
+    <AppShell member={me} wide>
       <Link href="/admin" className="text-sm text-stone-500 hover:underline">← 관리</Link>
       <h1 className="mt-2 text-xl font-bold">팀원 관리</h1>
       <div className="mt-4">

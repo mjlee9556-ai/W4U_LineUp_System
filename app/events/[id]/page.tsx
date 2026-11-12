@@ -2,13 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireMember } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
-import { formatShort, isCommunionSunday } from "@/lib/dates";
+import { formatShort, isCommunionSunday, weekOfMonthLabel } from "@/lib/dates";
 import { buildLineup, groupBySession, practiceDates, serviceDates } from "@/lib/lineup";
 import { getMemberNames, withDays } from "@/lib/queries";
-import { SESSION_LABELS } from "@/lib/sessions";
+import { SESSION_SHORT } from "@/lib/sessions";
 import { canEditSetlist, DEFAULT_COMMUNION_NOTICE, getSetlists, getSetting, type SetlistSong } from "@/lib/setlist";
 import { EVENT_TYPE_LABELS, type Assignment, type Guest, type LineupEvent } from "@/lib/types";
+import { eventLabel, getSelectableEvents, mainDate } from "@/lib/week";
 import { AppShell } from "@/components/AppShell";
+import { EventPicker } from "@/components/EventPicker";
+import { ArrowRightIcon, ClockIcon, FileIcon, LinkIcon, ListMusicIcon, PencilIcon, PlayCircleIcon } from "@/components/icons";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { Notice } from "@/components/Notice";
 import { SheetUpload } from "@/components/SheetUpload";
@@ -50,7 +53,8 @@ export default async function EventPage({
     showLineup ? query<Guest>(`select * from lineup_guests where event_id = $1 order by name`, [id]) : [],
     showSetlist ? getSetlists([id]) : new Map<string, SetlistSong[]>(),
   ]);
-  const names = await getMemberNames(assignments.map((a) => a.member_id));
+  const [names, selectable] = await Promise.all([getMemberNames(assignments.map((a) => a.member_id)), getSelectableEvents(member)]);
+  const pickerOptions = (selectable.some((e) => e.id === id) ? selectable : [...selectable, event]).map((e) => ({ id: e.id, label: eventLabel(e) }));
   const lineup = buildLineup(assignments, names, guests);
   const songs = setlists.get(id) ?? [];
 
@@ -61,60 +65,83 @@ export default async function EventPage({
 
   return (
     <AppShell member={member}>
-      <Link href={`/calendar?month=${event.end_date.slice(0, 7)}`} className="text-sm text-stone-500 hover:underline">
-        ← 캘린더
-      </Link>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <h1 className="text-xl font-bold">
-          {event.type === "weekend" ? `${formatShort(event.end_date)} 주일` : event.title}
-        </h1>
-        {communion && <span className="rounded-full bg-stone-800 px-2 py-0.5 text-xs font-semibold text-white">성찬식</span>}
-      </div>
-      <p className="mt-1 text-sm text-stone-600">
-        {EVENT_TYPE_LABELS[event.type]} · 예배 {dates.map(formatShort).join(", ")}
-        {practice.length > 0 ? ` · 연습 ${practice.map(formatShort).join(", ")}` : event.type === "weekend" ? " · 토 연습 없음" : ""}
+      <div className="flex items-center gap-2">
+        <EventPicker options={pickerOptions} value={id} basePath="/events/" />
         {isAdmin && (
-          <>
-            {" · "}
-            <Link href={`/admin/events/${id}`} className="underline-offset-2 hover:underline">라인업 편성</Link>
-          </>
+          <Link
+            href={`/admin/events/${id}`}
+            className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-800 hover:bg-stone-50"
+          >
+            <PencilIcon size={15} />
+            라인업 편성
+          </Link>
         )}
-      </p>
-      {communion && (
-        <p className="mt-3 rounded-lg border border-stone-300 bg-stone-100 px-3 py-2 text-sm text-stone-800">🕊️ {communionNotice}</p>
-      )}
+      </div>
+
+      <section className="relative mt-4 overflow-hidden rounded-2xl bg-navy-900 p-5 text-white shadow-lg">
+        <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/5" />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded-md bg-white/10 px-2 py-0.5 text-xs font-bold text-white/90">{EVENT_TYPE_LABELS[event.type]}</span>
+          {communion && <span className="rounded-md bg-accent-600 px-2 py-0.5 text-xs font-bold">성찬식</span>}
+          {!confirmed && <span className="rounded-md bg-amber-400/90 px-2 py-0.5 text-xs font-bold text-amber-950">편성 중</span>}
+        </div>
+        <h1 className="mt-2 text-[22px] font-extrabold tracking-tight">
+          {event.type === "weekend" ? `${weekOfMonthLabel(mainDate(event))} 주일 예배` : event.title}
+        </h1>
+        <p className="mt-1 flex items-center gap-1.5 text-sm text-white/70">
+          <ClockIcon size={15} />
+          예배 {dates.map(formatShort).join(", ")}
+          {practice.length > 0 ? ` · 연습 ${practice.map(formatShort).join(", ")}` : event.type === "weekend" ? " · 토 연습 없음" : ""}
+        </p>
+        {communion && <p className="mt-3 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/90">🕊️ {communionNotice}</p>}
+      </section>
 
       <div className="mt-4">
         <Notice tone="error" message={error ? ERRORS[error] : undefined} />
       </div>
 
-      <section className="card">
-        <h2 className="font-semibold">라인업 {showLineup && !confirmed && <span className="text-xs font-normal text-stone-500">(편성 중, 관리자만 보여요)</span>}</h2>
+      <section className="panel">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-extrabold text-stone-900">
+            라인업 {showLineup && !confirmed && <span className="text-xs font-normal text-stone-500">(편성 중, 관리자만 보여요)</span>}
+          </h2>
+          {showLineup && lineup.length > 0 && (
+            <Link href={`/lineup?event=${id}`} className="flex items-center gap-0.5 text-xs font-bold text-accent-600">
+              자세히 <ArrowRightIcon size={13} />
+            </Link>
+          )}
+        </div>
         {!showLineup || lineup.length === 0 ? (
           <p className="mt-2 text-sm text-stone-500">아직 라인업을 편성하고 있어요.</p>
         ) : (
-          <dl className="mt-3 grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-1.5 text-sm">
-            {groupBySession(lineup).map((g) => (
-              <div key={g.session} className="contents">
-                <dt className="text-stone-500">{SESSION_LABELS[g.session]}</dt>
-                <dd>
-                  {g.entries.map((e, i) => (
-                    <span key={e.key}>
-                      {i > 0 && ", "}
-                      <span className={e.memberId === member.id ? "font-semibold text-amber-700" : ""}>{e.name}</span>
-                      {e.guest && <span className="ml-1 rounded bg-stone-100 px-1 text-xs text-stone-600">게스트</span>}
-                    </span>
-                  ))}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {groupBySession(lineup).flatMap((g) =>
+              g.entries.map((e) => (
+                <span
+                  key={`${g.session}-${e.key}`}
+                  className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs ${
+                    e.memberId === member.id ? "border-accent-300 bg-accent-50 text-accent-600" : "border-stone-200 bg-stone-50 text-stone-700"
+                  }`}
+                >
+                  <span className="text-stone-400">{SESSION_SHORT[g.session]}</span>
+                  <b>{e.name}</b>
+                  {e.guest && <span className="text-stone-400">(G)</span>}
+                </span>
+              )),
+            )}
+          </div>
         )}
       </section>
 
       <section className="mt-6">
-        <div className="flex items-baseline justify-between">
-          <h2 className="font-semibold">콘티 {songs.length > 0 && <span className="text-sm font-normal text-stone-500">{songs.length}곡</span>}</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-[17px] font-extrabold text-stone-900">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-50 text-accent-600">
+              <ListMusicIcon size={17} />
+            </span>
+            예배 콘티
+            {songs.length > 0 && <span className="rounded-md bg-stone-100 px-1.5 py-0.5 text-xs font-bold text-stone-600">{songs.length}곡</span>}
+          </h2>
           {canEdit && <span className="text-xs text-stone-500">{isAdmin ? "관리자" : "인도자"}라서 고칠 수 있어요</span>}
         </div>
         {!showSetlist ? (
@@ -124,30 +151,36 @@ export default async function EventPage({
         ) : (
           <ol className="mt-3 space-y-3">
             {songs.map((song, i) => (
-              <li key={song.id} id={`song-${song.id}`} className="card scroll-mt-4">
+              <li key={song.id} id={`song-${song.id}`} className="panel scroll-mt-20">
                 <div className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-900 text-xs font-semibold text-white">
-                    {i + 1}
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-100 font-mono text-[15px] font-extrabold text-stone-700">
+                    {String(i + 1).padStart(2, "0")}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium">
-                      {song.title}
-                      {song.song_key && <span className="ml-2 rounded bg-amber-100 px-1.5 text-xs font-semibold text-amber-900">{song.song_key}</span>}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[17px] font-extrabold text-stone-900">{song.title}</span>
+                      {song.song_key && (
+                        <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-xs font-bold text-emerald-800">{song.song_key} Key</span>
+                      )}
                     </div>
                     {song.song_form && <div className="mt-1 font-mono text-xs text-stone-700">{song.song_form}</div>}
                     {song.memo && <p className="mt-1 whitespace-pre-line text-xs text-stone-600">{song.memo}</p>}
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                      {song.youtube_url && (
-                        <a href={song.youtube_url} target="_blank" rel="noopener noreferrer" className="text-red-700 underline-offset-2 hover:underline">
-                          ▶ 유튜브
-                        </a>
-                      )}
-                      {song.sheet_url && (
-                        <a href={song.sheet_url} target="_blank" rel="noopener noreferrer" className="text-stone-700 underline-offset-2 hover:underline">
-                          악보 링크
-                        </a>
-                      )}
-                    </div>
+                    {(song.youtube_url || song.sheet_url) && (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5 text-xs font-semibold">
+                        {song.sheet_url && (
+                          <a href={song.sheet_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-stone-700 hover:bg-stone-100">
+                            <LinkIcon size={13} />
+                            악보 링크
+                          </a>
+                        )}
+                        {song.youtube_url && (
+                          <a href={song.youtube_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-red-700 hover:bg-stone-100">
+                            <PlayCircleIcon size={13} />
+                            음원
+                          </a>
+                        )}
+                      </div>
+                    )}
                     {song.files.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {song.files.map((f) => (
@@ -155,10 +188,11 @@ export default async function EventPage({
                             <a href={`/sheets/${f.id}`} target="_blank" rel="noopener" title={f.filename} className="block">
                               {f.content_type.startsWith("image/") && f.content_type !== "image/heic" && f.content_type !== "image/heif" ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={`/sheets/${f.id}`} alt={`${song.title} 악보`} className="h-28 w-20 rounded border border-stone-200 object-cover" />
+                                <img src={`/sheets/${f.id}`} alt={`${song.title} 악보`} className="h-28 w-20 rounded-lg border border-stone-200 object-cover" />
                               ) : (
-                                <span className="flex h-28 w-20 items-center justify-center rounded border border-stone-200 bg-stone-50 p-1 text-center text-[10px] text-stone-600">
-                                  📄 {f.filename}
+                                <span className="flex h-28 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-stone-200 bg-stone-50 p-1 text-center text-[10px] text-stone-600">
+                                  <FileIcon size={18} />
+                                  <span className="line-clamp-2 break-all">{f.filename}</span>
                                 </span>
                               )}
                             </a>
