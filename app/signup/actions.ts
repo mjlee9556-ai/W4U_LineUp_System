@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { startSession } from "@/lib/auth";
-import { transaction } from "@/lib/db";
+import { queryOne, transaction } from "@/lib/db";
 import { hashPin, isValidPhone, isValidPin, normalizePhone } from "@/lib/pin";
 import { isSession } from "@/lib/sessions";
 import type { MemberStatus } from "@/lib/types";
@@ -67,4 +67,14 @@ export async function register(formData: FormData) {
 
   await startSession(memberId!);
   redirect(status! === "approved" ? "/calendar" : "/pending");
+}
+
+/** 가입 화면의 '중복확인' 버튼: 이미 가입된 번호인지 알려 준다 */
+export async function checkPhone(raw: string): Promise<{ ok: boolean; message: string }> {
+  const phone = normalizePhone(String(raw ?? ""));
+  if (!isValidPhone(phone)) return { ok: false, message: "전화번호를 - 없이 숫자만 정확히 입력해 주세요." };
+  const taken = await queryOne(`select 1 from members where phone = $1`, [phone]);
+  return taken
+    ? { ok: false, message: "이미 가입된 전화번호예요. 로그인해 주세요." }
+    : { ok: true, message: "사용할 수 있는 번호예요." };
 }

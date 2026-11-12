@@ -8,6 +8,8 @@ export const SESSIONS = [
   "electric",
   "acoustic",
   "drums",
+  "sound",
+  "media",
 ] as const;
 
 export type Session = (typeof SESSIONS)[number];
@@ -22,6 +24,8 @@ export const SESSION_LABELS: Record<Session, string> = {
   electric: "일렉",
   acoustic: "어쿠스틱",
   drums: "드럼",
+  sound: "방송/음향",
+  media: "미디어/자막",
 };
 
 /** 캘린더 칸처럼 좁은 곳에 쓰는 짧은 이름 */
@@ -35,6 +39,8 @@ export const SESSION_SHORT: Record<Session, string> = {
   electric: "일렉",
   acoustic: "어쿠",
   drums: "드럼",
+  sound: "음향",
+  media: "미디어",
 };
 
 /** 가입 때 고를 수 있는 세션. 서브 인도자는 관리자가 배정할 때만 사용 */
