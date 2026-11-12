@@ -94,3 +94,20 @@ export function isCommunionSunday(date: string): boolean {
   const d = parseISODate(date);
   return d.getUTCDay() === 0 && d.getUTCDate() <= 7;
 }
+
+/** '2026-12-13' → '12월 2주차' (그 달의 몇 번째 주일인지) */
+export function weekOfMonthLabel(s: string): string {
+  const d = parseISODate(s);
+  return `${d.getUTCMonth() + 1}월 ${Math.ceil(d.getUTCDate() / 7)}주차`;
+}
+
+/** '2026-12-13' → '12월 13일' */
+export function formatMonthDay(s: string): string {
+  const d = parseISODate(s);
+  return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일`;
+}
+
+/** 오늘부터 그 날짜까지 남은 날 수 (지났으면 음수) */
+export function daysUntil(s: string, today = todayKST()): number {
+  return Math.round((parseISODate(s).getTime() - parseISODate(today).getTime()) / 86_400_000);
+}

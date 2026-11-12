@@ -3,8 +3,6 @@
 import { useState } from "react";
 import { SESSION_LABELS, type Session } from "@/lib/sessions";
 import {
-  BarsIcon,
-  CaptionIcon,
   CheckIcon,
   DrumIcon,
   GuitarIcon,
@@ -25,8 +23,6 @@ const ICONS: Partial<Record<Session, (p: { size?: number }) => React.ReactNode>>
   electric: ZapIcon,
   acoustic: GuitarIcon,
   drums: DrumIcon,
-  sound: BarsIcon,
-  media: CaptionIcon,
 };
 
 /** 노래하는 파트는 주황, 나머지는 남색으로 선택 표시 */

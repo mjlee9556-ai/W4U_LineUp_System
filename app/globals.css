@@ -12,37 +12,42 @@
 }
 
 :root {
-  --background: #f7f7f5;
+  --background: #f7f6fa;
   --foreground: #1c1c1a;
 }
 
 body {
-  background: var(--background);
+  /* 위쪽에 아주 옅은 보라·분홍빛이 번지는 배경 */
+  background:
+    radial-gradient(70rem 36rem at 0% -10%, #efe9fb 0%, transparent 60%),
+    radial-gradient(60rem 30rem at 100% -5%, #fbeef2 0%, transparent 55%),
+    var(--background);
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: "Pretendard Variable", "Pretendard", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
 
 @utility card {
-    @apply rounded-xl border border-stone-200 bg-white p-4;
+    @apply rounded-2xl border border-stone-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)];
 }
 @utility btn {
     @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50;
 }
 @utility btn-primary {
-    @apply btn bg-stone-900 text-white hover:bg-stone-700;
+    @apply btn bg-navy-900 text-white hover:bg-navy-800;
 }
 @utility btn-secondary {
     @apply btn border border-stone-300 bg-white text-stone-800 hover:bg-stone-100;
 }
 @utility input {
-    @apply w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm focus:border-stone-500 focus:outline-none;
+    @apply w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm focus:border-navy-900 focus:outline-none;
 }
 @utility label {
     @apply mb-1 block text-sm font-medium text-stone-700;
 }
 /* 라디오·체크박스를 칩처럼 보이게 */
 @utility chip {
-    @apply cursor-pointer select-none rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 peer-checked:border-stone-900 peer-checked:bg-stone-900 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-stone-400;
+    @apply cursor-pointer select-none rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 peer-checked:border-navy-900 peer-checked:bg-navy-900 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-stone-400;
 }
 
 /* iOS Safari: 날짜 칸이 기본 모양·최소 너비 때문에 칸 밖으로 넘치거나 높이가 달라지는 것을 막는다 */

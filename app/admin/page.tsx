@@ -42,7 +42,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const nextMonth = shiftMonth(todayKST().slice(0, 7), 1);
 
   return (
-    <AppShell member={member}>
+    <AppShell member={member} wide>
       <h1 className="text-xl font-bold">관리</h1>
       <p className="mt-1 text-sm text-stone-600">
         승인된 팀원 {approvedCount}명 · <Link href="/admin/members" className="underline">팀원 관리 (PIN 초기화·관리자 지정)</Link>

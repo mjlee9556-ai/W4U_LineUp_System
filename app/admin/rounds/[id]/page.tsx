@@ -79,7 +79,7 @@ export default async function RoundPage({
   ].join("\n\n");
 
   return (
-    <AppShell member={member}>
+    <AppShell member={member} wide>
       <Link href="/admin" className="text-sm text-stone-500 hover:underline">← 관리</Link>
       <div className="mt-2 flex items-center justify-between">
         <h1 className="text-xl font-bold">{formatMonth(round.target_month.slice(0, 7))} 응답 현황</h1>

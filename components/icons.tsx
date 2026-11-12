@@ -79,9 +79,68 @@ export const GuitarIcon = (p: IconProps) => (
 export const DrumIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3" /></Svg>
 );
-export const BarsIcon = (p: IconProps) => (
-  <Svg {...p}><path d="M6 20v-6M12 20V4M18 20v-9" /></Svg>
+
+/* 공통 아이콘 */
+export const CalendarIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="3" y="4.5" width="18" height="16.5" rx="2.5" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></Svg>
 );
-export const CaptionIcon = (p: IconProps) => (
-  <Svg {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 11h3M13 11h4M7 15h6M15 15h2" /></Svg>
+export const UsersIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="8" r="3" /><circle cx="5" cy="10" r="2.2" /><circle cx="19" cy="10" r="2.2" /><path d="M6.5 19a5.5 5.5 0 0 1 11 0M1.5 18.5a3.8 3.8 0 0 1 4.5-3.6M22.5 18.5a3.8 3.8 0 0 0-4.5-3.6" /></Svg>
+);
+export const SettingsIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" /></Svg>
+);
+export const LogOutIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></Svg>
+);
+export const ClockIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Svg>
+);
+export const ChevronLeftIcon = (p: IconProps) => (
+  <Svg {...p}><path d="m15 18-6-6 6-6" /></Svg>
+);
+export const ChevronRightIcon = (p: IconProps) => (
+  <Svg {...p}><path d="m9 18 6-6-6-6" /></Svg>
+);
+export const ChevronDownIcon = (p: IconProps) => (
+  <Svg {...p}><path d="m6 9 6 6 6-6" /></Svg>
+);
+export const PlusIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>
+);
+export const AlertCircleIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" /></Svg>
+);
+export const CheckCircleIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.5 2.5 4.5-5" /></Svg>
+);
+export const XCircleIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="m15 9-6 6M9 9l6 6" /></Svg>
+);
+export const LockIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="4" y="10.5" width="16" height="10.5" rx="2" /><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5M12 15v2" /></Svg>
+);
+export const HelpIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M9.5 9.2a2.6 2.6 0 0 1 5 1c0 1.8-2.5 2.3-2.5 3.8M12 17h.01" /></Svg>
+);
+export const FileIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></Svg>
+);
+export const PlayCircleIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="m10 8.5 5 3.5-5 3.5v-7Z" /></Svg>
+);
+export const LinkIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" /><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" /></Svg>
+);
+export const PencilIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z" /></Svg>
+);
+export const SendIcon = (p: IconProps) => (
+  <Svg {...p}><path d="m22 2-7 20-4-9-9-4 20-7Z" /><path d="M22 2 11 13" /></Svg>
+);
+export const MegaphoneIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1ZM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /></Svg>
+);
+export const StarIcon = (p: IconProps) => (
+  <Svg {...p}><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9L12 3Z" /></Svg>
 );
