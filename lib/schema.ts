@@ -127,6 +127,16 @@ create table if not exists sheet_files (
 );
 create index if not exists sheet_files_song_idx on sheet_files (song_id);
 
+-- 파트(인도·보컬·악기)별 마지막 저장 기록: 팀장들이 각자 저장한 배정을 한 주 라인업으로 합칠 때 보여 준다
+create table if not exists lineup_part_saves (
+  event_id uuid not null references events (id) on delete cascade,
+  part text not null check (part in ('lead', 'vocal', 'instrument')),
+  saved_by uuid references members (id) on delete set null,
+  method text not null default 'manual' check (method in ('manual', 'auto')),
+  saved_at timestamptz not null default now(),
+  primary key (event_id, part)
+);
+
 -- 관리자가 캘린더 날짜에 남기는 공지·메모
 create table if not exists calendar_notes (
   id uuid primary key default gen_random_uuid(),

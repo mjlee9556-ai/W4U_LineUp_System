@@ -2,15 +2,17 @@ import Link from "next/link";
 import { requireMember } from "@/lib/auth";
 import { formatShort, isCommunionSunday, isValidMonth, todayKST } from "@/lib/dates";
 import { practiceDates, serviceDates, type LineupEntry } from "@/lib/lineup";
-import { REQUIRED_SESSIONS, SESSION_GROUPS, SESSION_LABELS, type Session } from "@/lib/sessions";
+import { PART_LABELS, REQUIRED_SESSIONS, SESSION_GROUPS, SESSION_LABELS, type Session } from "@/lib/sessions";
 import { DEFAULT_COMMUNION_NOTICE, getSetlists, getSetting } from "@/lib/setlist";
 import { EVENT_TYPE_LABELS, isAdmin as canManage } from "@/lib/types";
-import { eventLabel, getLineup, getMonthWeeks, getSelectableEvents, mainDate, pickCurrent } from "@/lib/week";
+import { eventLabel, getLineup, getMonthWeeks, getPartSaves, getSelectableEvents, mainDate, pickCurrent } from "@/lib/week";
 import { AppShell } from "@/components/AppShell";
-import { autoAssignEvent } from "@/app/admin/actions";
+import { autoAssignEvent, confirmEventLineup } from "@/app/admin/actions";
 import { AutoAssignOptions } from "@/components/AutoAssignOptions";
 import { EventPicker } from "@/components/EventPicker";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { MonthLineupBoard } from "@/components/MonthLineupBoard";
+import { PartSaveStatus } from "@/components/PartSaveStatus";
 import { Notice } from "@/components/Notice";
 import { ShareButton } from "@/components/ShareButton";
 import {
@@ -75,7 +77,12 @@ export default async function LineupPage({
     );
   }
 
-  const [lineup, setlists] = await Promise.all([getLineup(event.id), getSetlists([event.id])]);
+  const [lineup, setlists, partSaves] = await Promise.all([
+    getLineup(event.id),
+    getSetlists([event.id]),
+    isAdmin ? getPartSaves([event.id]) : Promise.resolve([]),
+  ]);
+  const unsavedParts = (["vocal", "instrument"] as const).filter((p) => !partSaves.some((x) => x.part === p));
   const songCount = setlists.get(event.id)?.length ?? 0;
   const confirmed = event.lineup_status === "confirmed";
   const confirmedWeek = confirmed;
@@ -122,7 +129,7 @@ export default async function LineupPage({
 
       <div className="mt-4">
         <Notice
-          message={saved === "auto" ? `이 주 ${SCOPE_LABEL[scope ?? "all"] ?? ""} 자동 배정을 마쳤어요. 아래 명단을 확인하고, 고칠 곳은 '수동 배정'에서 바꾸거나 확정해 주세요.` : undefined}
+          message={saved === "confirm" ? "보컬·악기 배정을 합쳐 라인업을 확정했어요. 팀원 캘린더에 바로 보여요." : saved === "auto" ? `이 주 ${SCOPE_LABEL[scope ?? "all"] ?? ""} 자동 배정을 마쳤어요. 아래 명단을 확인하고, 고칠 곳은 '수동 배정'에서 바꾸거나 확정해 주세요.` : undefined}
         />
         <Notice
           tone="error"
@@ -192,6 +199,33 @@ export default async function LineupPage({
           {!canAutoAssign && !confirmedWeek && (
             <p className="mt-2 text-xs text-stone-400">수련회·특별예배는 자동 배정 없이 수동으로 배정해요.</p>
           )}
+
+          <div className="mt-4 border-t border-stone-100 pt-3">
+            <h3 className="mb-2 text-[13px] font-extrabold text-ink-900">파트별 저장 현황</h3>
+            <PartSaveStatus saves={partSaves} filledSessions={[...new Set(lineup.map((e) => e.session))]} />
+            {!confirmedWeek && (
+              <form action={confirmEventLineup} className="mt-3">
+                <input type="hidden" name="event_id" value={event.id} />
+                <ConfirmSubmitButton
+                  confirmMessage={[
+                    "보컬·악기 배정을 합쳐 이 주 라인업을 확정하고 팀원에게 공개할까요?",
+                    unsavedParts.length ? `아직 저장하지 않은 파트: ${unsavedParts.map((p) => PART_LABELS[p]).join(", ")}` : "",
+                    vacant ? `공석 ${vacant}석이 남아 있어요.` : "",
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n")}
+                  pendingText="확정 중…"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-ink-900 text-sm font-bold text-white shadow-sm hover:bg-navy-800 disabled:opacity-60"
+                >
+                  <CheckCircleIcon size={17} />
+                  보컬·악기 통합해서 확정하고 공개
+                </ConfirmSubmitButton>
+                <p className="mt-1.5 text-center text-[11px] text-stone-500">
+                  팀장들이 각자 저장한 배정이 이미 한 주 라인업으로 합쳐져 있어요. 확인 후 눌러 주세요.
+                </p>
+              </form>
+            )}
+          </div>
         </section>
       )}
 

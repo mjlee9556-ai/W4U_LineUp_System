@@ -9,7 +9,10 @@ import { canServe, EVENT_TYPE_LABELS, missesPractice, type Assignment, type Avai
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { PartSaveStatus } from "@/components/PartSaveStatus";
 import { ServeCountTable } from "@/components/ServeCountTable";
+import { TouchedSessions } from "@/components/TouchedSessions";
+import { getPartSaves } from "@/lib/week";
 import { SubmitButton } from "@/components/SubmitButton";
 import {
   AlertTriangleIcon,
@@ -33,21 +36,22 @@ export default async function EventLineupPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string }>;
+  searchParams: Promise<{ saved?: string; nochange?: string }>;
 }) {
   const { id } = await params;
-  const { saved } = await searchParams;
+  const { saved, nochange } = await searchParams;
   const { member } = await requireAdmin();
 
   const found = await queryOne<LineupEvent>(`select * from events where id = $1`, [id]);
   if (!found) notFound();
   const [event] = await withDays([found]);
 
-  const [answerRows, assignments, members, guests] = await Promise.all([
+  const [answerRows, assignments, members, guests, partSaves] = await Promise.all([
     query<Availability>(`select * from availabilities where event_id = $1`, [id]),
     query<Assignment>(`select * from lineup_assignments where event_id = $1`, [id]),
     query<Pick<Member, "id" | "name">>(`select id, name from members where status = 'approved' order by name`),
     query<Guest>(`select * from lineup_guests where event_id = $1 order by name`, [id]),
+    getPartSaves([id]),
   ]);
   // 같은 달(회차) 전체 배정: 섬김 횟수 표용
   const monthAssignments = event.round_id
@@ -110,7 +114,26 @@ export default async function EventLineupPage({
           </p>
         </div>
 
-        <Notice message={saved === "confirm" ? "라인업을 확정했어요. 팀원 캘린더에 바로 보여요." : saved ? "임시 저장했어요." : undefined} />
+        <Notice
+          message={
+            saved === "confirm"
+              ? "라인업을 확정했어요. 팀원 캘린더에 바로 보여요."
+              : saved && nochange
+                ? "고친 세션이 없어서 바뀐 것은 없어요."
+                : saved
+                  ? "고친 세션만 저장했어요. 다른 팀장이 저장한 파트는 그대로 합쳐져 있어요."
+                  : undefined
+          }
+        />
+
+        <section className="panel">
+          <h2 className="mb-2 text-sm font-extrabold text-ink-900">파트별 저장 현황</h2>
+          <PartSaveStatus saves={partSaves} filledSessions={[...new Set([...assignments.map((a) => a.session), ...guests.map((g) => g.session)])]} />
+          <p className="mt-2 text-[11px] leading-relaxed text-stone-500">
+            보컬팀장·악기팀장이 각자 다른 기기에서 저장해도 고친 세션만 바뀌어서 한 주 라인업으로 합쳐져요. 다른 팀장이 방금 저장했다면 새로고침해서
+            최신 배정을 확인하세요.
+          </p>
+        </section>
 
         {confirmed ? (
           <section className="rounded-2xl border border-sage-200 bg-sage-50 p-4">
@@ -185,6 +208,7 @@ export default async function EventLineupPage({
               return (
                 <section
                   key={session}
+                  data-session={session}
                   className="rounded-2xl border border-stone-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition has-[:checked]:border-ink-900/25 has-[:checked]:shadow-[0_6px_20px_-6px_rgba(27,36,56,0.18)]"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -222,6 +246,7 @@ export default async function EventLineupPage({
             })}
           </fieldset>
 
+          {!confirmed && <TouchedSessions />}
           {!confirmed && (
             <div className="grid grid-cols-2 gap-2 pt-1">
               <SubmitButton

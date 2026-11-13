@@ -10,8 +10,10 @@ import { addDays, isValidMonth, monthStart, todayKST, weekendSets } from "@/lib/
 import { hashPin, isValidPhone, isValidPin, normalizePhone } from "@/lib/pin";
 import { autoAssign } from "@/lib/autoassign";
 import { parseGuestNames } from "@/lib/lineup";
-import { INSTRUMENT_SESSIONS, isSession, SESSIONS, SIGNUP_SESSIONS, VOICE_SESSIONS, type Session } from "@/lib/sessions";
+import { INSTRUMENT_SESSIONS, isSession, partOf, SESSIONS, SIGNUP_SESSIONS, VOICE_SESSIONS, type Part, type Session } from "@/lib/sessions";
 import { ADMIN_TITLES, CAN_SERVE_SQL, MISSES_PRACTICE_SQL, type EventType, type MemberStatus } from "@/lib/types";
+
+type Tx = Parameters<Parameters<typeof transaction>[0]>[0];
 
 /**
  * 팀원 상태 바꾸기.
@@ -282,42 +284,67 @@ export async function createSpecialEvent(formData: FormData) {
   redirect(`/admin/events/${eventId}`);
 }
 
-/** 라인업 저장. 체크값은 'session:memberId' */
+/** 파트별 마지막 저장 기록을 남긴다 (누가·언제·자동/수동) */
+async function recordPartSaves(tx: Tx, eventIds: string[], parts: Iterable<Part>, memberId: string, method: "manual" | "auto") {
+  for (const eventId of eventIds) {
+    for (const part of new Set(parts)) {
+      await tx.query(
+        `insert into lineup_part_saves (event_id, part, saved_by, method, saved_at) values ($1, $2, $3, $4, now())
+         on conflict (event_id, part) do update set saved_by = excluded.saved_by, method = excluded.method, saved_at = now()`,
+        [eventId, part, memberId, method],
+      );
+    }
+  }
+}
+
+/**
+ * 라인업 저장. 체크값은 'session:memberId'.
+ * 화면에서 실제로 고친 세션(touched)만 바꾼다. 그래서 보컬팀장과 악기팀장이 각자 다른 기기에서
+ * 다른 시간에 저장해도 서로의 배정을 덮어쓰지 않고 한 주 라인업으로 합쳐진다.
+ * (partial 표시가 없는 예전 화면에서 보내면 예전처럼 모든 세션을 바꾼다)
+ */
 export async function saveLineup(formData: FormData) {
-  await requireAdmin();
+  const { member } = await requireAdmin();
   const eventId = String(formData.get("event_id"));
   const intent = String(formData.get("intent") ?? "save");
+  const partial = formData.get("partial") === "1";
+  const touched = new Set<Session>(
+    partial ? formData.getAll("touched").map(String).filter(isSession) : SESSIONS,
+  );
 
   const picks = formData
     .getAll("assign")
     .map(String)
     .map((v) => v.split(":"))
-    .filter(([session, memberId]) => isSession(session) && !!memberId);
+    .filter(([session, memberId]) => isSession(session) && !!memberId && touched.has(session as Session));
 
   await transaction(async (tx) => {
-    // 토 연습이 있는 주의 '토 불가' 응답자도 편성할 수 있고, '토 불참'으로 표시한다
-    const satAbsent = new Set(
-      (
-        await tx.query<{ member_id: string }>(
-          `select a.member_id from availabilities a where a.event_id = $1 and ${MISSES_PRACTICE_SQL}`,
-          [eventId],
-        )
-      ).rows.map((r) => r.member_id),
-    );
-    await tx.query(`delete from lineup_assignments where event_id = $1`, [eventId]);
-    for (const [session, memberId] of picks) {
-      await tx.query(`insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)`, [
-        eventId,
-        memberId,
-        session,
-        satAbsent.has(memberId),
-      ]);
-    }
-    await tx.query(`delete from lineup_guests where event_id = $1`, [eventId]);
-    for (const session of SESSIONS) {
-      for (const name of parseGuestNames(String(formData.get(`guests:${session}`) ?? ""))) {
-        await tx.query(`insert into lineup_guests (event_id, session, name) values ($1, $2, $3)`, [eventId, session, name]);
+    if (touched.size) {
+      // 토 연습이 있는 주의 '토 불가' 응답자도 편성할 수 있고, '토 불참'으로 표시한다
+      const satAbsent = new Set(
+        (
+          await tx.query<{ member_id: string }>(
+            `select a.member_id from availabilities a where a.event_id = $1 and ${MISSES_PRACTICE_SQL}`,
+            [eventId],
+          )
+        ).rows.map((r) => r.member_id),
+      );
+      const sessions = [...touched];
+      await tx.query(`delete from lineup_assignments where event_id = $1 and session = any($2::text[])`, [eventId, sessions]);
+      for (const [session, memberId] of picks) {
+        await tx.query(
+          `insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)
+           on conflict do nothing`,
+          [eventId, memberId, session, satAbsent.has(memberId)],
+        );
       }
+      await tx.query(`delete from lineup_guests where event_id = $1 and session = any($2::text[])`, [eventId, sessions]);
+      for (const session of sessions) {
+        for (const name of parseGuestNames(String(formData.get(`guests:${session}`) ?? ""))) {
+          await tx.query(`insert into lineup_guests (event_id, session, name) values ($1, $2, $3)`, [eventId, session, name]);
+        }
+      }
+      await recordPartSaves(tx, [eventId], sessions.map(partOf), member.id, "manual");
     }
     if (intent === "confirm") {
       await tx.query(`update events set lineup_status = 'confirmed', confirmed_at = now() where id = $1`, [eventId]);
@@ -325,8 +352,20 @@ export async function saveLineup(formData: FormData) {
   });
 
   revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/lineup");
   revalidatePath("/calendar");
-  redirect(`/admin/events/${eventId}?saved=${intent}`);
+  redirect(`/admin/events/${eventId}?saved=${intent}${touched.size ? "" : "&nochange=1"}`);
+}
+
+/** 라인업 탭: 팀장들이 따로 저장한 보컬·악기 배정을 그대로 합쳐 확정하고 공개한다 */
+export async function confirmEventLineup(formData: FormData) {
+  await requireAdmin();
+  const eventId = String(formData.get("event_id"));
+  await query(`update events set lineup_status = 'confirmed', confirmed_at = now() where id = $1 and lineup_status = 'draft'`, [eventId]);
+  revalidatePath("/lineup");
+  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/calendar");
+  redirect(`/lineup?event=${eventId}&saved=confirm`);
 }
 
 export async function unconfirmLineup(formData: FormData) {
@@ -348,7 +387,6 @@ export async function deleteEvent(formData: FormData) {
   redirect("/admin?deleted=event");
 }
 
-type Tx = Parameters<Parameters<typeof transaction>[0]>[0];
 
 /** 자동 배정 폼(범위 체크박스·파트별 인원)을 읽는다 */
 function readAutoAssignForm(formData: FormData) {
@@ -375,6 +413,7 @@ async function runAutoAssign(
   roundId: string,
   targets: Set<Session>,
   sessions: { session: Session; count: number }[],
+  memberId: string,
   onlyEventIds?: string[],
 ) {
   const events = (
@@ -427,17 +466,18 @@ async function runAutoAssign(
       absent.has(`${r.eventId}:${r.memberId}`),
     ]);
   }
+  await recordPartSaves(tx, [...draftIds], [...targets].map(partOf), memberId, "auto");
   return drafts.length;
 }
 
 /** 응답 현황 화면: 회차의 편성 중인 주를 모두 자동 배정 */
 export async function autoAssignRound(formData: FormData) {
-  await requireAdmin();
+  const { member } = await requireAdmin();
   const roundId = String(formData.get("round_id"));
   const { targets, sessions, label } = readAutoAssignForm(formData);
   if (!targets.size) redirect(`/admin/rounds/${roundId}?error=scope#auto`);
 
-  await transaction((tx) => runAutoAssign(tx, roundId, targets, sessions));
+  await transaction((tx) => runAutoAssign(tx, roundId, targets, sessions, member.id));
 
   revalidatePath(`/admin/rounds/${roundId}`);
   revalidatePath("/lineup");
@@ -446,7 +486,7 @@ export async function autoAssignRound(formData: FormData) {
 
 /** 라인업 화면: 한 주만 자동 배정 (같은 달 다른 주의 배정은 공평 분배 계산에만 넣는다) */
 export async function autoAssignEvent(formData: FormData) {
-  await requireAdmin();
+  const { member } = await requireAdmin();
   const eventId = String(formData.get("event_id"));
   const back = `/lineup?event=${eventId}`;
   const { targets, sessions, label } = readAutoAssignForm(formData);
@@ -459,7 +499,7 @@ export async function autoAssignEvent(formData: FormData) {
   if (!event?.round_id || event.type !== "weekend" || event.lineup_status !== "draft") redirect(`${back}&error=auto`);
   const roundId = event.round_id;
 
-  await transaction((tx) => runAutoAssign(tx, roundId, targets, sessions, [eventId]));
+  await transaction((tx) => runAutoAssign(tx, roundId, targets, sessions, member.id, [eventId]));
 
   revalidatePath("/lineup");
   revalidatePath(`/admin/rounds/${roundId}`);
