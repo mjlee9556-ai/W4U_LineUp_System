@@ -9,6 +9,23 @@
   --color-accent-300: #f5a57c;
   --color-accent-500: #ea6a2f;
   --color-accent-600: #d4531b;
+  /* 라인업 관리 화면(디자인 'Warm Liturgical Sanctuary')의 파트 색 */
+  --color-ember-50: #fdf2ee;
+  --color-ember-200: #f5d6c9;
+  --color-ember-600: #d96b43;
+  --color-ink-50: #eceef2;
+  --color-ink-200: #ced4df;
+  --color-ink-900: #1b2438;
+  --color-sage-50: #eef3f0;
+  --color-sage-200: #cddcd3;
+  --color-sage-700: #4b6354;
+  --color-umber-50: #f7f2ee;
+  --color-umber-200: #dfd1c7;
+  --color-umber-700: #6b4f3a;
+  --color-gold-50: #fbf4e8;
+  --color-gold-300: #e5c48f;
+  --color-gold-500: #d4a359;
+  --color-gold-700: #8a6420;
 }
 
 :root {
