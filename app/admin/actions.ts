@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { query, queryOne, transaction } from "@/lib/db";
 import { addDays, isValidMonth, monthStart, todayKST, weekendSets } from "@/lib/dates";
-import { hashPin } from "@/lib/pin";
+import { hashPin, isValidPhone, isValidPin, normalizePhone } from "@/lib/pin";
 import { autoAssign } from "@/lib/autoassign";
 import { parseGuestNames } from "@/lib/lineup";
 import { INSTRUMENT_SESSIONS, isSession, SESSIONS, SIGNUP_SESSIONS, VOICE_SESSIONS, type Session } from "@/lib/sessions";
@@ -80,6 +80,39 @@ export async function resetPin(formData: FormData) {
     maxAge: 60,
   });
   redirect("/admin/members");
+}
+
+/**
+ * 관리자가 팀원의 전화번호(로그인 아이디)와 PIN을 직접 고친다.
+ * PIN 칸을 비우면 PIN은 그대로 둔다. PIN을 바꾸면 잠금을 풀고 그 사람의 로그인 세션을 모두 끊는다.
+ */
+export async function updateMemberCredentials(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("member_id"));
+  const phone = normalizePhone(String(formData.get("phone") ?? ""));
+  const pin = String(formData.get("pin") ?? "").trim();
+  const fail = (code: string) => redirect(`/admin/members?error=${code}&edit=${id}#m-${id}`);
+
+  if (!isValidPhone(phone)) fail("phone");
+  if (pin && !isValidPin(pin)) fail("pin");
+
+  const result = await transaction(async (tx) => {
+    const taken = await tx.query(`select 1 from members where phone = $1 and id <> $2`, [phone, id]);
+    if (taken.rows.length) return "taken" as const;
+    const { rows } = pin
+      ? await tx.query<{ name: string }>(
+          `update members set phone = $2, pin_hash = $3, failed_logins = 0, locked_until = null where id = $1 returning name`,
+          [id, phone, hashPin(pin)],
+        )
+      : await tx.query<{ name: string }>(`update members set phone = $2 where id = $1 returning name`, [id, phone]);
+    if (!rows[0]) return null;
+    if (pin) await tx.query(`delete from auth_sessions where member_id = $1`, [id]);
+    return rows[0].name;
+  });
+  if (result === "taken") fail("phone-taken");
+
+  revalidatePath("/admin/members");
+  redirect(`/admin/members?updated=${encodeURIComponent(result ?? "")}${pin ? "&pin=1" : ""}#m-${id}`);
 }
 
 function randomCode() {
