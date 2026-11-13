@@ -19,7 +19,7 @@ import {
 import { practiceDates, serviceDates, type LineupEntry } from "@/lib/lineup";
 import { REQUIRED_SESSIONS, SESSION_LABELS } from "@/lib/sessions";
 import { DEFAULT_COMMUNION_NOTICE, getSetlists, getSetting, type SetlistSong } from "@/lib/setlist";
-import { EVENT_TYPE_LABELS, type Assignment, type Availability, type CalendarNote, type LineupEvent } from "@/lib/types";
+import { EVENT_TYPE_LABELS, type Assignment, type Availability, type CalendarNote, type LineupEvent, isAdmin as canManage } from "@/lib/types";
 import { getLineup, getSelectableEvents, mainDate } from "@/lib/week";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -51,7 +51,7 @@ export default async function CalendarPage({
   searchParams: Promise<{ month?: string; date?: string; note?: string }>;
 }) {
   const { member } = await requireMember();
-  const isAdmin = member.role === "admin";
+  const isAdmin = canManage(member);
   const params = await searchParams;
   const today = todayKST();
   const month = isValidMonth(params.month) ? params.month : (params.date?.slice(0, 7) ?? today.slice(0, 7));

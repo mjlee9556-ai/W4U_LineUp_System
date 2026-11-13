@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Member } from "@/lib/types";
+import { isAdmin, type Member } from "@/lib/types";
 import { BottomNav } from "@/components/BottomNav";
 import { ArrowLeftIcon, ChurchIcon, SettingsIcon } from "@/components/icons";
 
@@ -49,7 +49,7 @@ export function AppShell({
           )}
           <div className="flex shrink-0 items-center gap-1">
             {action}
-            {member.role === "admin" && !back && (
+            {isAdmin(member) && !back && (
               <Link
                 href="/admin"
                 className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-stone-700 hover:bg-stone-100"

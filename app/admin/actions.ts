@@ -4,31 +4,55 @@ import { randomInt } from "crypto";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireOwner } from "@/lib/auth";
 import { query, queryOne, transaction } from "@/lib/db";
 import { addDays, isValidMonth, monthStart, todayKST, weekendSets } from "@/lib/dates";
 import { hashPin, isValidPhone, isValidPin, normalizePhone } from "@/lib/pin";
 import { autoAssign } from "@/lib/autoassign";
 import { parseGuestNames } from "@/lib/lineup";
 import { INSTRUMENT_SESSIONS, isSession, SESSIONS, SIGNUP_SESSIONS, VOICE_SESSIONS, type Session } from "@/lib/sessions";
-import { CAN_SERVE_SQL, MISSES_PRACTICE_SQL, type EventType, type MemberStatus } from "@/lib/types";
+import { ADMIN_TITLES, CAN_SERVE_SQL, MISSES_PRACTICE_SQL, type EventType, type MemberStatus } from "@/lib/types";
 
+/**
+ * 팀원 상태 바꾸기.
+ * 가입 승인 대기자의 승인·거절은 준관리자도 할 수 있고, 이미 가입한 팀원의 비활성화·다시 활성화는 최종 관리자만 한다.
+ */
 export async function setMemberStatus(formData: FormData) {
-  await requireAdmin();
+  const id = String(formData.get("member_id"));
   const status = String(formData.get("status")) as MemberStatus;
   if (!["approved", "inactive", "pending"].includes(status)) return;
-  await query(`update members set status = $2 where id = $1`, [String(formData.get("member_id")), status]);
+  const target = await queryOne<{ status: MemberStatus; role: string }>(`select status, role from members where id = $1`, [id]);
+  if (!target) return;
+  if (target.status === "pending") await requireAdmin();
+  else await requireOwner();
+  // 최종 관리자 계정은 비활성화할 수 없다 (관리자가 아무도 없게 되는 일을 막는다)
+  if (target.role === "owner" && status !== "approved") redirect("/admin/members?error=owner-self");
+  await query(`update members set status = $2 where id = $1`, [id, status]);
   revalidatePath("/admin");
   revalidatePath("/admin/members");
 }
 
-export async function setMemberRole(formData: FormData) {
-  const { member } = await requireAdmin();
+/**
+ * 최종 관리자가 팀원에게 준관리자 직함(찬양팀장·악기팀장·보컬팀장)을 주거나 거둔다.
+ * title이 'member'면 일반 팀원으로 되돌린다. 최종 관리자 자신의 권한은 바꾸지 않는다.
+ */
+export async function setMemberTitle(formData: FormData) {
+  await requireOwner();
   const id = String(formData.get("member_id"));
-  const role = String(formData.get("role")) === "admin" ? "admin" : "member";
-  if (id === member.id && role === "member") redirect("/admin/members?error=self");
-  await query(`update members set role = $2 where id = $1`, [id, role]);
+  const title = String(formData.get("title") ?? "");
+  const target = await queryOne<{ role: string; name: string }>(`select role, name from members where id = $1`, [id]);
+  if (!target) redirect("/admin/members");
+  if (target.role === "owner") redirect("/admin/members?error=owner-self");
+
+  if (title === "member") {
+    await query(`update members set role = 'member', admin_title = null where id = $1`, [id]);
+  } else if ((ADMIN_TITLES as readonly string[]).includes(title)) {
+    await query(`update members set role = 'admin', admin_title = $2 where id = $1`, [id, title]);
+  } else {
+    redirect("/admin/members");
+  }
   revalidatePath("/admin/members");
+  redirect(`/admin/members?titled=${encodeURIComponent(target.name)}#m-${id}`);
 }
 
 /**
@@ -37,13 +61,13 @@ export async function setMemberRole(formData: FormData) {
  * 본인은 지울 수 없으므로 관리자가 한 명도 없게 되는 일은 없다.
  */
 export async function deleteMember(formData: FormData) {
-  const { member } = await requireAdmin();
+  const { member } = await requireOwner();
   const id = String(formData.get("member_id"));
   if (id === member.id) redirect("/admin/members?error=self-delete");
 
   const name = await transaction(async (tx) => {
-    const { rows } = await tx.query<{ name: string }>(`select name from members where id = $1`, [id]);
-    if (!rows[0]) return null;
+    const { rows } = await tx.query<{ name: string; role: string }>(`select name, role from members where id = $1`, [id]);
+    if (!rows[0] || rows[0].role === "owner") return null;
     await tx.query(
       `insert into lineup_guests (event_id, session, name)
        select a.event_id, a.session, m.name
@@ -64,7 +88,7 @@ export async function deleteMember(formData: FormData) {
 
 /** 임시 PIN을 만들어 관리자 화면에 한 번 보여준다 */
 export async function resetPin(formData: FormData) {
-  await requireAdmin();
+  await requireOwner();
   const id = String(formData.get("member_id"));
   const temp = String(randomInt(0, 10000)).padStart(4, "0");
   const target = await queryOne<{ name: string }>(
@@ -87,7 +111,7 @@ export async function resetPin(formData: FormData) {
  * PIN 칸을 비우면 PIN은 그대로 둔다. PIN을 바꾸면 잠금을 풀고 그 사람의 로그인 세션을 모두 끊는다.
  */
 export async function updateMemberCredentials(formData: FormData) {
-  await requireAdmin();
+  await requireOwner();
   const id = String(formData.get("member_id"));
   const phone = normalizePhone(String(formData.get("phone") ?? ""));
   const pin = String(formData.get("pin") ?? "").trim();

@@ -53,7 +53,7 @@ export async function register(formData: FormData) {
       const { rows } = await tx.query<{ id: string }>(
         `insert into members (name, phone, pin_hash, birth_date, email, district, dong, role, status, privacy_agreed_at)
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now()) returning id`,
-        [get("name"), phone, hashPin(pin), get("birth_date") || null, get("email") || null, address, null, isFirst ? "admin" : "member", status],
+        [get("name"), phone, hashPin(pin), get("birth_date") || null, get("email") || null, address, null, isFirst ? "owner" : "member", status],
       );
       for (const s of sessions) {
         await tx.query(`insert into member_sessions (member_id, session) values ($1, $2) on conflict do nothing`, [rows[0].id, s]);

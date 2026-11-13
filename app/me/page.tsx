@@ -6,7 +6,7 @@ import { practiceDates } from "@/lib/lineup";
 import { formatPhone, PIN_PATTERN } from "@/lib/pin";
 import { withDays } from "@/lib/queries";
 import { SESSION_LABELS, SIGNUP_SESSIONS, type Session } from "@/lib/sessions";
-import { formatAddress, type LineupEvent } from "@/lib/types";
+import { formatAddress, type LineupEvent, isAdmin, roleLabel } from "@/lib/types";
 import { getLineup, mainDate } from "@/lib/week";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
@@ -74,7 +74,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[20px] font-extrabold text-stone-900">{member.name}</span>
-              {member.role === "admin" && <span className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[11px] font-bold text-stone-600">관리자</span>}
+              {isAdmin(member) && <span className="rounded-md bg-stone-100 px-1.5 py-0.5 text-[11px] font-bold text-stone-600">{roleLabel(member)}</span>}
             </div>
             <div className="mt-1.5 flex flex-wrap gap-1">
               {sessions.map((s) => (
@@ -201,7 +201,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
       <ul className="panel mt-4 divide-y divide-stone-100 p-0">
         <MenuRow href="/availability" icon={<SendIcon size={18} />} title="사역 가능일 제출" sub="매달 섬길 수 있는 날을 알려 주세요" />
         <MenuRow href="/calendar" icon={<CalendarIcon size={18} />} title="사역 캘린더" sub="확정된 라인업을 날짜별로 봐요" />
-        {member.role === "admin" && <MenuRow href="/admin" icon={<SettingsIcon size={18} />} title="관리" sub="회차·라인업 편성, 가입 승인, 초대코드" />}
+        {isAdmin(member) && <MenuRow href="/admin" icon={<SettingsIcon size={18} />} title="관리" sub="회차·라인업 편성, 가입 승인, 초대코드" />}
         <li>
           <form action="/auth/signout" method="post">
             <button className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-stone-50">

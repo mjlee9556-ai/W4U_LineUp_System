@@ -143,6 +143,15 @@ create table if not exists app_settings (
   value text not null
 );
 
+-- 권한: owner(최종 관리자) / admin(준관리자: 찬양팀장·악기팀장·보컬팀장) / member
+alter table members drop constraint if exists members_role_check;
+alter table members add constraint members_role_check check (role in ('member', 'admin', 'owner'));
+alter table members add column if not exists admin_title text;
+-- 최종 관리자가 아직 없으면 가장 먼저 가입한 관리자를 최종 관리자로 정한다
+update members set role = 'owner'
+ where id = (select id from members where role = 'admin' order by created_at limit 1)
+   and not exists (select 1 from members where role = 'owner');
+
 -- 잠시 있었던 방송/음향·미디어/자막 세션은 찬양팀 사역이 아니어서 정리한다
 delete from member_sessions where session in ('sound', 'media');
 update availabilities set sessions = array_remove(array_remove(sessions, 'sound'), 'media')
