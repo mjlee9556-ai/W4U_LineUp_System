@@ -39,7 +39,7 @@ export default async function PracticePage({ params }: { params: Promise<{ id: s
 
   const rows = events.map((e) => {
     const answered = answers.filter((a) => a.event_id === e.id);
-    const available = answered.filter((a) => canServe(a.status, e));
+    const available = answered.filter((a) => canServe(a.status));
     const sunOnly = answered.filter((a) => a.status === "sun_only").length;
     return {
       event: e,
@@ -85,9 +85,9 @@ export default async function PracticePage({ params }: { params: Promise<{ id: s
             토요일 연습 유무 안내
           </h1>
           <p className="mt-1.5 text-[13px] leading-relaxed text-stone-700">
-            토요일 연습이 있는 주에는 <b className="text-ember-600">&apos;토 불가&apos;</b>로 답한 팀원이 자동 배정 풀에서 빠져요. 연습이 없는
-            주(주일 당일 리허설 등)로 바꾸면 <b className="text-ember-600">&apos;토 불가&apos;</b> 응답은 &apos;가능&apos;으로 바뀌어 정상
-            배정돼요.
+            토요일 연습이 있는 주에도 <b className="text-ember-600">&apos;토 불가&apos;</b>로 답한 팀원을 주일 라인업에 넣을 수 있어요.
+            다만 자동 배정은 토 연습에 오는 사람을 먼저 넣고, 그 파트에 다른 사람이 없을 때만 &apos;토 불참&apos;으로 넣어요. 연습이 없는
+            주(주일 당일 리허설 등)로 바꾸면 &apos;토 불가&apos; 응답은 &apos;가능&apos;으로 바뀌어요.
           </p>
         </section>
 
@@ -124,7 +124,7 @@ export default async function PracticePage({ params }: { params: Promise<{ id: s
                       {r.sunOnly && r.practice ? (
                         <span className="font-bold text-ember-600">
                           {r.sunOnly}
-                          <span className="text-[10px] font-semibold">(제외)</span>
+                          <span className="text-[10px] font-semibold">(토 불참)</span>
                         </span>
                       ) : (
                         <span className="text-stone-300">0</span>
@@ -136,7 +136,7 @@ export default async function PracticePage({ params }: { params: Promise<{ id: s
             </table>
           </div>
           <p className="flex items-center justify-between gap-2 border-t border-stone-100 px-4 py-2.5 text-[11px] text-stone-500">
-            <span>* 점 표시된 주는 토 연습이 없어 &apos;토 불가&apos; 팀원도 배정 풀에 들어가요.</span>
+            <span>* 점 표시된 주는 토 연습이 없는 주예요. 숫자에는 &apos;토 불가&apos; 팀원도 포함돼요.</span>
             <span className="shrink-0 font-semibold text-ember-600">
               총 가용 {totalAvailable}/{totalAnswered}
             </span>
@@ -206,7 +206,7 @@ export default async function PracticePage({ params }: { params: Promise<{ id: s
                       <>
                         <span className="flex items-center gap-1.5 font-semibold text-ember-600">
                           <UserPlusIcon size={15} />
-                          토 불가 팀원 자동 배정에 포함됨
+                          토 연습 없음 · 모두 같은 조건으로 배정
                         </span>
                         <span className="shrink-0 rounded-md bg-white px-2 py-0.5 text-[11px] font-semibold text-ember-600">가용 {r.available}명</span>
                       </>
@@ -214,11 +214,11 @@ export default async function PracticePage({ params }: { params: Promise<{ id: s
                       <>
                         <span className="flex min-w-0 items-center gap-2">
                           <span className="shrink-0 rounded-md border border-ember-200 bg-ember-50 px-2 py-0.5 text-[11px] font-bold text-ember-600">
-                            토불가 {r.sunOnly}명 제외
+                            토불가 {r.sunOnly}명
                           </span>
-                          <span className="truncate text-stone-600">가용 {r.available}명 풀 적용</span>
+                          <span className="truncate text-stone-600">가용 {r.available}명 (토 불참 포함)</span>
                         </span>
-                        <span className="shrink-0 text-xs font-semibold text-ember-600">{r.sunOnly}명 자동 배제</span>
+                        <span className="shrink-0 text-xs font-semibold text-ember-600">부족할 때만 배정</span>
                       </>
                     ) : (
                       <>

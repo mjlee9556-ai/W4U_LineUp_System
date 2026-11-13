@@ -87,4 +87,25 @@ describe("autoAssign", () => {
     // B가 이미 1번 섬겼으니 A
     expect(rows[0].memberId).toBe("A");
   });
+
+  it("토 연습에 오는 사람을 먼저 넣고, '토 불가'는 다른 후보가 없을 때만 넣는다", () => {
+    // A는 1·2주차 가능하지만 2주차는 토 불가 → 2주차는 토 연습에 오는 B가 맡는다
+    const rows = autoAssign({
+      events: [{ id: "w1" }, { id: "w2" }],
+      sessions: [{ session: "bass", count: 1 }],
+      candidates: avail({ bass: { A: [1, 2], B: [2] } }),
+      missesPractice: (eventId, memberId) => eventId === "w2" && memberId === "A",
+    });
+    expect(weeksOf(rows, "B")).toEqual([2]);
+    expect(weeksOf(rows, "A")).toEqual([1]);
+
+    // 그 주 다른 후보가 없으면 '토 불가'라도 넣는다
+    const only = autoAssign({
+      events: [{ id: "w1" }],
+      sessions: [{ session: "drums", count: 1 }],
+      candidates: avail({ drums: { A: [1] } }),
+      missesPractice: () => true,
+    });
+    expect(weeksOf(only, "A")).toEqual([1]);
+  });
 });

@@ -11,7 +11,7 @@ import { hashPin, isValidPhone, isValidPin, normalizePhone } from "@/lib/pin";
 import { autoAssign } from "@/lib/autoassign";
 import { parseGuestNames } from "@/lib/lineup";
 import { INSTRUMENT_SESSIONS, isSession, SESSIONS, SIGNUP_SESSIONS, VOICE_SESSIONS, type Session } from "@/lib/sessions";
-import { CAN_SERVE_SQL, type EventType, type MemberStatus } from "@/lib/types";
+import { CAN_SERVE_SQL, MISSES_PRACTICE_SQL, type EventType, type MemberStatus } from "@/lib/types";
 
 export async function setMemberStatus(formData: FormData) {
   await requireAdmin();
@@ -271,22 +271,22 @@ export async function saveLineup(formData: FormData) {
     .filter(([session, memberId]) => isSession(session) && !!memberId);
 
   await transaction(async (tx) => {
-    // 토 연습이 있는 주의 '토 불가' 응답자는 편성하지 않는다
-    const blocked = new Set(
+    // 토 연습이 있는 주의 '토 불가' 응답자도 편성할 수 있고, '토 불참'으로 표시한다
+    const satAbsent = new Set(
       (
         await tx.query<{ member_id: string }>(
-          `select a.member_id from availabilities a where a.event_id = $1 and not (${CAN_SERVE_SQL})`,
+          `select a.member_id from availabilities a where a.event_id = $1 and ${MISSES_PRACTICE_SQL}`,
           [eventId],
         )
       ).rows.map((r) => r.member_id),
     );
     await tx.query(`delete from lineup_assignments where event_id = $1`, [eventId]);
     for (const [session, memberId] of picks) {
-      if (blocked.has(memberId)) continue;
-      await tx.query(`insert into lineup_assignments (event_id, member_id, session) values ($1, $2, $3)`, [
+      await tx.query(`insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)`, [
         eventId,
         memberId,
         session,
+        satAbsent.has(memberId),
       ]);
     }
     await tx.query(`delete from lineup_guests where event_id = $1`, [eventId]);
@@ -356,8 +356,8 @@ export async function autoAssignRound(formData: FormData) {
 
     const ids = events.map((e) => e.id);
     const answers = (
-      await tx.query<{ event_id: string; member_id: string; status: string; sessions: Session[] }>(
-        `select a.event_id, a.member_id, a.status, a.sessions
+      await tx.query<{ event_id: string; member_id: string; status: string; sessions: Session[]; misses_practice: boolean }>(
+        `select a.event_id, a.member_id, a.status, a.sessions, (${MISSES_PRACTICE_SQL}) as misses_practice
            from availabilities a join members m on m.id = a.member_id and m.status = 'approved'
           where a.event_id = any($1::uuid[]) and ${CAN_SERVE_SQL}`,
         [ids],
@@ -373,12 +373,14 @@ export async function autoAssignRound(formData: FormData) {
       )
     ).rows.filter((f) => f.lineup_status === "confirmed" || !targets.has(f.session));
 
+    const absent = new Set(answers.filter((a) => a.misses_practice).map((a) => `${a.event_id}:${a.member_id}`));
     const rows = autoAssign({
       events: drafts,
       sessions,
       candidates: (eventId, session) =>
         answers.filter((a) => a.event_id === eventId && a.sessions.includes(session)).map((a) => a.member_id),
       fixed: fixed.map((f) => ({ eventId: f.event_id, memberId: f.member_id, session: f.session })),
+      missesPractice: (eventId, memberId) => absent.has(`${eventId}:${memberId}`),
     });
 
     await tx.query(`delete from lineup_assignments where event_id = any($1::uuid[]) and session = any($2::text[])`, [
@@ -386,10 +388,11 @@ export async function autoAssignRound(formData: FormData) {
       [...targets],
     ]);
     for (const r of rows) {
-      await tx.query(`insert into lineup_assignments (event_id, member_id, session) values ($1, $2, $3)`, [
+      await tx.query(`insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)`, [
         r.eventId,
         r.memberId,
         r.session,
+        absent.has(`${r.eventId}:${r.memberId}`),
       ]);
     }
   });

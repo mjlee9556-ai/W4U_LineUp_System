@@ -5,7 +5,7 @@ import { query, queryOne } from "@/lib/db";
 import { withDays } from "@/lib/queries";
 import { formatMonth, formatShort } from "@/lib/dates";
 import { SESSION_LABELS, SESSIONS } from "@/lib/sessions";
-import { canServe, EVENT_TYPE_LABELS, type Assignment, type Availability, type Guest, type LineupEvent, type Member } from "@/lib/types";
+import { canServe, EVENT_TYPE_LABELS, missesPractice, type Assignment, type Availability, type Guest, type LineupEvent, type Member } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -61,11 +61,10 @@ export default async function EventLineupPage({
 
   const available = members.filter((m) => {
     const a = answers.get(m.id);
-    return a && canServe(a.status, event);
+    return a && canServe(a.status);
   });
-  // 토 연습이 있는 주의 '토 불가' 응답자: 이번 주는 편성할 수 없다
-  const satBlocked = members.filter((m) => answers.get(m.id)?.status === "sun_only" && !canServe("sun_only", event));
   const confirmed = event.lineup_status === "confirmed";
+  const hasPractice = (event.event_days ?? []).some((d) => d.kind === "practice") && event.type === "weekend";
   const days = (event.event_days ?? []).sort((a, b) => a.date.localeCompare(b.date));
   const peopleCount = new Set(assignments.map((a) => a.member_id)).size + guests.length;
   const backHref = event.round_id ? `/admin/rounds/${event.round_id}` : "/admin";
@@ -134,6 +133,7 @@ export default async function EventLineupPage({
             <LightbulbIcon size={18} className="mt-0.5 shrink-0 text-gold-500" />
             <span>
               세션마다 인원 제한은 없어요. 가능한 팀원이 없으면 <b className="text-ink-900">&apos;게스트&apos;</b> 칸에 이름을 적어 넣을 수 있어요.
+              {hasPractice && <> <b className="text-red-600">토 불참</b> 표시는 토 연습에 못 오는 팀원이에요. 주일 라인업에는 넣을 수 있어요.</>}
             </span>
           </p>
         )}
@@ -148,7 +148,6 @@ export default async function EventLineupPage({
                 return s.includes(session === "sub_leader" ? "leader" : session);
               };
               const primary = available.filter(wants);
-              const blockedHere = satBlocked.filter(wants);
               const others = available.filter((m) => !wants(m));
               const assignedCount = assignments.filter((a) => a.session === session).length;
               const sessionGuests = guests.filter((g) => g.session === session).map((g) => g.name);
@@ -170,6 +169,11 @@ export default async function EventLineupPage({
                       className="inline-flex select-none items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-[13px] font-bold text-ink-900 transition hover:border-stone-300 peer-checked:border-ink-900 peer-checked:bg-ink-900 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-ink-900/30"
                     >
                       {m.name}
+                      {missesPractice(a.status, event) && (
+                        <span className="rounded bg-red-50 px-1 py-px text-[10px] font-bold text-red-600 group-has-[:checked]:bg-white/15 group-has-[:checked]:text-white">
+                          토 불참
+                        </span>
+                      )}
                       {a.comment && <span className="text-xs opacity-70">💬</span>}
                       <PlusIcon size={13} strokeWidth={2.4} className="text-stone-400 group-has-[:checked]:hidden" />
                       <XIcon size={13} strokeWidth={2.4} className="hidden group-has-[:checked]:block" />
@@ -197,11 +201,6 @@ export default async function EventLineupPage({
 
                   {primary.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{primary.map(renderOption)}</div>}
 
-                  {blockedHere.length > 0 && (
-                    <p className="mt-2 text-xs text-stone-500">
-                      토 불가라 이번 주는 편성할 수 없어요: {blockedHere.map((m) => m.name).join(", ")}
-                    </p>
-                  )}
                   {others.length > 0 && (
                     <details className="mt-2" open={others.some((m) => assigned.has(`${session}:${m.id}`)) || undefined}>
                       <summary className="cursor-pointer text-xs text-stone-500 marker:text-stone-400">

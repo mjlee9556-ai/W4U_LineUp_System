@@ -19,9 +19,13 @@ import {
 import { practiceDates, serviceDates, type LineupEntry } from "@/lib/lineup";
 import { REQUIRED_SESSIONS, SESSION_LABELS } from "@/lib/sessions";
 import { DEFAULT_COMMUNION_NOTICE, getSetlists, getSetting, type SetlistSong } from "@/lib/setlist";
-import { EVENT_TYPE_LABELS, type Assignment, type Availability, type LineupEvent } from "@/lib/types";
+import { EVENT_TYPE_LABELS, type Assignment, type Availability, type CalendarNote, type LineupEvent } from "@/lib/types";
 import { getLineup, getSelectableEvents, mainDate } from "@/lib/week";
 import { AppShell } from "@/components/AppShell";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { Notice } from "@/components/Notice";
+import { SubmitButton } from "@/components/SubmitButton";
+import { addCalendarNote, deleteCalendarNote } from "./actions";
 import {
   ArrowRightIcon,
   CalendarIcon,
@@ -32,20 +36,36 @@ import {
   FileIcon,
   ListMusicIcon,
   MegaphoneIcon,
+  PencilIcon,
+  PlusIcon,
   SendIcon,
   StarIcon,
+  XIcon,
 } from "@/components/icons";
 
 type Service = { date: string; event: LineupEvent };
 
-export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ month?: string; date?: string }> }) {
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string; date?: string; note?: string }>;
+}) {
   const { member } = await requireMember();
+  const isAdmin = member.role === "admin";
   const params = await searchParams;
   const today = todayKST();
   const month = isValidMonth(params.month) ? params.month : (params.date?.slice(0, 7) ?? today.slice(0, 7));
 
   const grid = calendarGrid(month);
-  const events = await getEventsBetween(grid[0].date, grid.at(-1)!.date);
+  const [events, notes] = await Promise.all([
+    getEventsBetween(grid[0].date, grid.at(-1)!.date),
+    query<CalendarNote>(`select * from calendar_notes where date between $1 and $2 order by date, created_at`, [
+      grid[0].date,
+      grid.at(-1)!.date,
+    ]),
+  ]);
+  const notesOn = (date: string) => notes.filter((n) => n.date === date);
+  const monthNotes = notes.filter((n) => n.date.startsWith(month));
   const confirmedIds = events.filter((e) => e.lineup_status === "confirmed").map((e) => e.id);
   const myAssignments = await query<Assignment>(
     `select * from lineup_assignments where member_id = $1 and event_id = any($2::uuid[])`,
@@ -67,6 +87,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         ? today
         : (monthServices.find((s) => s.date >= today) ?? monthServices[0])?.date ?? today;
   const selectedServices = servicesOn(selected);
+  const selectedNotes = notesOn(selected);
 
   // 이번 주 라인업 · 콘티: 다가오는 확정 일정
   const confirmedSoon = (await getSelectableEvents({ role: "member" })).find((e) => mainDate(e) >= today);
@@ -151,6 +172,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                     />
                   ))}
                   {day.length === 0 && practiceSet.has(date) && <span className={`h-1.5 w-1.5 rounded-full ${isSel ? "bg-white/60" : "bg-stone-300"}`} />}
+                  {notesOn(date).length > 0 && <span className={`h-1.5 w-1.5 rotate-45 rounded-[1px] ${isSel ? "bg-gold-300" : "bg-gold-500"}`} />}
                 </span>
                 {mine && !isSel && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-accent-600" />}
                 {isCommunionSunday(date) && inMonth && <span className="sr-only">성찬식</span>}
@@ -164,6 +186,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <Legend color="bg-amber-400" label="편성 중" />
           <Legend color="bg-violet-500" label="내 섬김" />
           <Legend color="bg-stone-300" label="토 연습" />
+          <Legend color="bg-gold-500" label="공지·메모" />
         </div>
 
         <div className="mt-3 space-y-2 pb-1">
@@ -203,8 +226,84 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
               );
             })
           )}
+
+          <div id="notes" className="scroll-mt-20 space-y-2">
+            {selectedNotes.map((n) => (
+              <div key={n.id} className="flex items-start gap-2.5 rounded-xl border border-gold-300/70 bg-gold-50 px-3 py-2.5">
+                <MegaphoneIcon size={16} className="mt-0.5 shrink-0 text-gold-700" />
+                <p className="min-w-0 flex-1 whitespace-pre-line break-words text-[13px] leading-relaxed text-stone-800">{n.content}</p>
+                {isAdmin && (
+                  <form action={deleteCalendarNote} className="shrink-0">
+                    <input type="hidden" name="note_id" value={n.id} />
+                    <ConfirmSubmitButton
+                      confirmMessage="이 메모를 삭제할까요?"
+                      pendingText="…"
+                      className="rounded-md p-1 text-stone-400 hover:bg-white hover:text-red-600"
+                    >
+                      <XIcon size={15} />
+                      <span className="sr-only">메모 삭제</span>
+                    </ConfirmSubmitButton>
+                  </form>
+                )}
+              </div>
+            ))}
+
+            {isAdmin && (
+              <details className="rounded-xl border border-dashed border-stone-300 bg-white" open={params.note === "empty" || undefined}>
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2.5 text-[13px] font-bold text-stone-600 hover:text-ink-900 [&::-webkit-details-marker]:hidden">
+                  <PlusIcon size={15} strokeWidth={2.4} />
+                  {formatMonthDay(selected)}({weekdayLabel(selected)})에 공지·메모 추가
+                </summary>
+                <form action={addCalendarNote} className="space-y-2 border-t border-stone-100 px-3 pb-3 pt-2.5">
+                  <input type="hidden" name="date" value={selected} />
+                  {params.note === "empty" && <Notice tone="error" message="메모 내용을 입력해 주세요." />}
+                  <textarea
+                    name="content"
+                    required
+                    maxLength={300}
+                    rows={3}
+                    placeholder="예: 리허설 8:30으로 변경 · 찬양팀 회식 · 새 악보 확인"
+                    aria-label="공지·메모 내용"
+                    className="w-full resize-none rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-ink-900 focus:ring-2 focus:ring-ink-900/10 focus:outline-none"
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-stone-400">모든 팀원의 캘린더에 보여요 · 300자까지</span>
+                    <SubmitButton className="flex items-center gap-1 rounded-lg bg-ink-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-navy-800 disabled:opacity-60">
+                      <PencilIcon size={13} />
+                      메모 저장
+                    </SubmitButton>
+                  </div>
+                </form>
+              </details>
+            )}
+          </div>
         </div>
       </section>
+
+      {monthNotes.length > 0 && (
+        <section className="panel mt-4">
+          <h2 className="flex items-center gap-2 text-[15px] font-extrabold text-stone-900">
+            <MegaphoneIcon size={17} className="text-gold-700" />
+            {Number(month.slice(5))}월 공지·메모
+            <span className="rounded-md bg-gold-50 px-1.5 py-0.5 text-[11px] font-bold text-gold-700">{monthNotes.length}</span>
+          </h2>
+          <ul className="mt-2 divide-y divide-stone-100">
+            {monthNotes.map((n) => (
+              <li key={n.id}>
+                <Link
+                  href={`/calendar?month=${month}&date=${n.date}#notes`}
+                  scroll={false}
+                  className="flex items-start gap-3 py-2.5 hover:bg-stone-50"
+                >
+                  <span className="w-14 shrink-0 text-[13px] font-bold text-ink-900">{formatShort(n.date)}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-stone-700">{n.content}</span>
+                  <ChevronRightIcon size={15} className="mt-0.5 shrink-0 text-stone-300" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {open.events.length > 0 && (
         <section className="panel mt-4">
