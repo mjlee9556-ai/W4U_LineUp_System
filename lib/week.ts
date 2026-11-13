@@ -1,4 +1,5 @@
 import "server-only";
+import { isAdmin } from "@/lib/types";
 import { query } from "@/lib/db";
 import { addDays, parseISODate, todayKST, weekOfMonthLabel } from "@/lib/dates";
 import { buildLineup, serviceDates, type LineupEntry } from "@/lib/lineup";
@@ -18,7 +19,7 @@ export async function getSelectableEvents(member: Pick<Member, "role">): Promise
   const today = todayKST();
   const events = await query<LineupEvent>(
     `select * from events
-      where end_date >= $1 and start_date <= $2 ${member.role === "admin" ? "" : "and lineup_status = 'confirmed'"}
+      where end_date >= $1 and start_date <= $2 ${isAdmin(member) ? "" : "and lineup_status = 'confirmed'"}
       order by start_date`,
     [addDays(today, -35), addDays(today, 70)],
   );

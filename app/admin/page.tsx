@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { addDays, formatMonth, formatShort, shiftMonth, todayKST } from "@/lib/dates";
 import { SESSION_LABELS, type Session } from "@/lib/sessions";
-import { EVENT_TYPE_LABELS, formatAddress, type LineupEvent, type Member, type Round } from "@/lib/types";
+import { EVENT_TYPE_LABELS, formatAddress, roleLabel, type LineupEvent, type Member, type Round } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -60,7 +60,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       action={
         <span className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[13px] font-bold text-ink-900">
           <ShieldCheckIcon size={15} />
-          관리자
+          {roleLabel(member)}
         </span>
       }
     >
@@ -71,7 +71,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             승인된 팀원 <b className="text-ink-900">{approvedCount}명</b>
             <span className="text-stone-300">·</span>
             <Link href="/admin/members" className="inline-flex items-center gap-0.5 font-semibold text-ink-900 underline underline-offset-2 hover:text-navy-700">
-              팀원 관리 (PIN·전화번호·관리자 지정)
+              팀원 관리 (계정·직함 관리)
               <ChevronRightIcon size={14} />
             </Link>
           </p>

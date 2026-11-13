@@ -4,7 +4,7 @@ import { formatShort, isCommunionSunday } from "@/lib/dates";
 import { practiceDates, serviceDates, type LineupEntry } from "@/lib/lineup";
 import { REQUIRED_SESSIONS, SESSION_GROUPS, SESSION_LABELS, type Session } from "@/lib/sessions";
 import { DEFAULT_COMMUNION_NOTICE, getSetlists, getSetting } from "@/lib/setlist";
-import { EVENT_TYPE_LABELS } from "@/lib/types";
+import { EVENT_TYPE_LABELS, isAdmin as canManage } from "@/lib/types";
 import { eventLabel, getLineup, getSelectableEvents, mainDate, pickCurrent } from "@/lib/week";
 import { AppShell } from "@/components/AppShell";
 import { EventPicker } from "@/components/EventPicker";
@@ -34,7 +34,7 @@ const initial = (name: string) => name.trim().slice(0, 1);
 export default async function LineupPage({ searchParams }: { searchParams: Promise<{ event?: string }> }) {
   const { member } = await requireMember();
   const { event: wanted } = await searchParams;
-  const isAdmin = member.role === "admin";
+  const isAdmin = canManage(member);
 
   const events = await getSelectableEvents(member);
   const event = events.find((e) => e.id === wanted) ?? pickCurrent(events);

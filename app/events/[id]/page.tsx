@@ -7,7 +7,7 @@ import { buildLineup, groupBySession, practiceDates, serviceDates } from "@/lib/
 import { getMemberNames, withDays } from "@/lib/queries";
 import { SESSION_SHORT } from "@/lib/sessions";
 import { canEditSetlist, DEFAULT_COMMUNION_NOTICE, getSetlists, getSetting, type SetlistSong } from "@/lib/setlist";
-import { EVENT_TYPE_LABELS, type Assignment, type Guest, type LineupEvent } from "@/lib/types";
+import { EVENT_TYPE_LABELS, type Assignment, type Guest, type LineupEvent, isAdmin as canManage } from "@/lib/types";
 import { eventLabel, getSelectableEvents, mainDate } from "@/lib/week";
 import { AppShell } from "@/components/AppShell";
 import { EventPicker } from "@/components/EventPicker";
@@ -42,7 +42,7 @@ export default async function EventPage({
   if (!found) notFound();
   const [event] = await withDays([found]);
 
-  const isAdmin = member.role === "admin";
+  const isAdmin = canManage(member);
   const confirmed = event.lineup_status === "confirmed";
   const canEdit = await canEditSetlist(member, id);
   const showLineup = confirmed || isAdmin;

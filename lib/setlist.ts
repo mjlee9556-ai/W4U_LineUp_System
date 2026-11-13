@@ -1,4 +1,5 @@
 import "server-only";
+import { isAdmin } from "@/lib/types";
 import { query, queryOne } from "@/lib/db";
 import type { Member } from "@/lib/types";
 
@@ -24,7 +25,7 @@ export const DEFAULT_COMMUNION_NOTICE = "성찬식 주일이에요. 무채색 �
 
 /** 콘티를 고칠 수 있는 사람: 관리자, 그 주에 인도자·서브 인도자로 배정된 사람 */
 export async function canEditSetlist(member: Pick<Member, "id" | "role">, eventId: string): Promise<boolean> {
-  if (member.role === "admin") return true;
+  if (isAdmin(member)) return true;
   const row = await queryOne(
     `select 1 from lineup_assignments where event_id = $1 and member_id = $2 and session in ('leader', 'sub_leader')`,
     [eventId, member.id],

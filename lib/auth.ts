@@ -1,4 +1,5 @@
 import "server-only";
+import { isAdmin, isOwner } from "@/lib/types";
 import { createHash, randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -36,7 +37,7 @@ export async function endSession() {
   store.delete(SESSION_COOKIE);
 }
 
-const MEMBER_COLUMNS = `m.id, m.name, m.phone, m.birth_date, m.email, m.district, m.dong, m.role, m.status, m.created_at`;
+const MEMBER_COLUMNS = `m.id, m.name, m.phone, m.birth_date, m.email, m.district, m.dong, m.role, m.admin_title, m.status, m.created_at`;
 
 /** 로그인한 팀원. 없으면 member가 null */
 export async function getCurrentMember() {
@@ -62,8 +63,16 @@ export async function requireMember() {
   return { ...ctx, member: ctx.member };
 }
 
+/** 준관리자 이상 (관리 메뉴) */
 export async function requireAdmin() {
   const ctx = await requireMember();
-  if (ctx.member.role !== "admin") redirect("/");
+  if (!isAdmin(ctx.member)) redirect("/");
+  return ctx;
+}
+
+/** 최종 관리자만 (팀원 계정 관리) */
+export async function requireOwner() {
+  const ctx = await requireMember();
+  if (!isOwner(ctx.member)) redirect(isAdmin(ctx.member) ? "/admin/members?error=owner" : "/");
   return ctx;
 }
