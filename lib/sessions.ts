@@ -68,3 +68,14 @@ export const INSTRUMENT_SESSIONS: readonly Session[] = ["main_keys", "second_key
 export const AUTO_ASSIGN_SESSIONS: readonly Session[] = [...VOICE_SESSIONS, ...INSTRUMENT_SESSIONS];
 
 export const AUTO_ASSIGN_DEFAULT_COUNT: Partial<Record<Session, number>> = { vocal: 5, acoustic: 0 };
+
+/** 팀장별로 나눠 맡는 파트: 인도(인도자·서브 인도자) / 보컬 / 악기 */
+export type Part = "lead" | "vocal" | "instrument";
+export const PARTS: readonly Part[] = ["lead", "vocal", "instrument"];
+export const PART_LABELS: Record<Part, string> = { lead: "인도", vocal: "보컬", instrument: "악기" };
+
+export function partOf(session: Session): Part {
+  if (session === "leader" || session === "sub_leader") return "lead";
+  if (session === "vocal") return "vocal";
+  return "instrument";
+}

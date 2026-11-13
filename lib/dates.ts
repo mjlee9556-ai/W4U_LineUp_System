@@ -111,3 +111,11 @@ export function formatMonthDay(s: string): string {
 export function daysUntil(s: string, today = todayKST()): number {
   return Math.round((parseISODate(s).getTime() - parseISODate(today).getTime()) / 86_400_000);
 }
+
+/** 저장 시각(timestamptz 문자열) → 한국 시간 '11/14 14:03' */
+export function formatKSTDateTime(ts: string): string {
+  const d = new Date(new Date(ts).getTime() + 9 * 3600_000);
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${hh}:${mm}`;
+}

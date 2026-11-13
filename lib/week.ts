@@ -4,7 +4,7 @@ import { query } from "@/lib/db";
 import { addDays, monthStart, parseISODate, shiftMonth, todayKST, weekOfMonthLabel } from "@/lib/dates";
 import { buildLineup, practiceDates, serviceDates, type LineupEntry } from "@/lib/lineup";
 import { getEventsBetween, getMemberNames, withDays } from "@/lib/queries";
-import { REQUIRED_SESSIONS, type Session } from "@/lib/sessions";
+import { REQUIRED_SESSIONS, type Part, type Session } from "@/lib/sessions";
 import type { Assignment, Guest, LineupEvent, Member } from "@/lib/types";
 
 /** 일정의 대표 날짜(마지막 예배일) */
@@ -84,4 +84,17 @@ export async function getMonthWeeks(month: string, member: Pick<Member, "role">)
     };
   });
   return { events, weeks };
+}
+
+export type PartSave = { event_id: string; part: Part; saved_by_name: string | null; method: "manual" | "auto"; saved_at: string };
+
+/** 파트별 마지막 저장 기록 (누가·언제·자동/수동) */
+export async function getPartSaves(eventIds: string[]): Promise<PartSave[]> {
+  if (!eventIds.length) return [];
+  return query<PartSave>(
+    `select p.event_id, p.part, m.name as saved_by_name, p.method, p.saved_at
+       from lineup_part_saves p left join members m on m.id = p.saved_by
+      where p.event_id = any($1::uuid[])`,
+    [eventIds],
+  );
 }
