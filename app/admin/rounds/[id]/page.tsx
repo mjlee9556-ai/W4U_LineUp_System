@@ -95,12 +95,12 @@ export default async function RoundPage({
   const eventById = new Map(events.map((e) => [e.id, e]));
   for (const a of answers) {
     const ev = eventById.get(a.event_id);
-    if (!ev || !canServe(a.status, ev)) continue;
+    if (!ev || !canServe(a.status)) continue;
     for (const s of a.sessions) availableWeeks.set(`${a.member_id}:${s}`, (availableWeeks.get(`${a.member_id}:${s}`) ?? 0) + 1);
   }
   /** 그 주에 그 세션으로 편성할 수 있는 인원 */
   const availableCount = (e: LineupEvent, s: Session) =>
-    answers.filter((a) => a.event_id === e.id && canServe(a.status, e) && a.sessions.includes(s)).length;
+    answers.filter((a) => a.event_id === e.id && canServe(a.status) && a.sessions.includes(s)).length;
 
   // 주별 배정 결과: 채워진 세션·공석
   const weeks = events.map((e) => {
@@ -306,9 +306,8 @@ export default async function RoundPage({
           <p className="mt-3 flex items-start gap-2 border-t border-stone-100 pt-3 text-xs leading-relaxed text-stone-600">
             <InfoIcon size={15} className="mt-0.5 shrink-0 text-ink-900" />
             <span>
-              숫자는 세션별로 편성할 수 있는 인원이에요 (토 연습이 있는 주의 &apos;토 불가&apos;는 빼고 세요). 토요일 연습이 없는 주는{" "}
-              <b className="text-ink-900">&apos;토 연습&apos;</b>을 눌러 &apos;없음&apos;으로 바꾸면 팀원은 그 주를 가능/불가로만 답하고, 토 불가
-              인원도 배정 풀에 들어가요.
+              숫자는 세션별로 편성할 수 있는 인원이에요 (&apos;토 불가&apos;도 주일에는 섬길 수 있어 포함해요). 토요일 연습이 없는 주는{" "}
+              <b className="text-ink-900">&apos;토 연습&apos;</b>을 눌러 &apos;없음&apos;으로 바꾸면 팀원은 그 주를 가능/불가로만 답해요.
             </span>
           </p>
         </section>
@@ -325,8 +324,8 @@ export default async function RoundPage({
             </div>
           </div>
           <p className="rounded-xl border border-stone-200/70 bg-stone-50 p-3 text-[12.5px] leading-relaxed text-stone-600">
-            파트마다 가능하다고 답한 주에만, 한 달 섬김 횟수가 고르게 되도록 나눠 넣어요. &apos;토 불가&apos;인 사람은 토 연습이 없는 주에만
-            넣고, 한 사람은 한 주에 한 파트만 맡아요. 확정된 주는 바꾸지 않고 횟수에만 셈해요.
+            파트마다 가능하다고 답한 주에만, 한 달 섬김 횟수가 고르게 되도록 나눠 넣어요. 토 연습에 오는 사람을 먼저 넣고, &apos;토 불가&apos;인 사람은 그
+            파트에 다른 사람이 없을 때 &apos;토 불참&apos;으로 넣어요. 한 사람은 한 주에 한 파트만 맡아요. 확정된 주는 바꾸지 않고 횟수에만 셈해요.
           </p>
           <form action={autoAssignRound} className="space-y-4">
             <input type="hidden" name="round_id" value={round.id} />

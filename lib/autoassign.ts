@@ -9,6 +9,8 @@ export type AutoAssignInput = {
   candidates: (eventId: string, session: Session) => string[];
   /** 이미 확정돼 바꾸지 않는 배정. 공평하게 나눌 때 횟수에 포함한다 */
   fixed?: { eventId: string; memberId: string; session: Session }[];
+  /** 그 주 토 연습에 못 오는 사람('토 불가'). 다른 후보가 없을 때만 고른다 */
+  missesPractice?: (eventId: string, memberId: string) => boolean;
 };
 
 export type AutoAssignment = { eventId: string; memberId: string; session: Session };
@@ -17,13 +19,14 @@ export type AutoAssignment = { eventId: string; memberId: string; session: Sessi
  * 파트(세션)마다 가능한 주만 후보로 삼아, 한 달 섬김 횟수가 고르게 되도록 배정한다.
  *
  * - 후보가 적은 주부터 채운다 (그 주를 맡을 수 있는 사람이 적을수록 먼저)
+ * - 토 연습에 오는 사람을 먼저 고르고, '토 불가'인 사람은 다른 후보가 없을 때만 넣는다
  * - 한 사람을 같은 주에 두 세션으로 넣지 않는다 (필요하면 관리자가 직접)
  * - 같은 세션에서 지금까지 덜 섬긴 사람을 먼저 고른다
  * - 그다음은 전체 섬김이 적은 사람, 가능한 주가 적은 사람(기회가 적은 사람) 순
  *
  * 예: 베이스 A(1,2,4,5주) B(3,5주) → A 1·2·4주, B 3·5주
  */
-export function autoAssign({ events, sessions, candidates, fixed = [] }: AutoAssignInput): AutoAssignment[] {
+export function autoAssign({ events, sessions, candidates, fixed = [], missesPractice = () => false }: AutoAssignInput): AutoAssignment[] {
   const result: AutoAssignment[] = [];
   const total = new Map<string, number>();
   const busy = new Set<string>(); // `${eventId}:${memberId}`
@@ -55,6 +58,7 @@ export function autoAssign({ events, sessions, candidates, fixed = [] }: AutoAss
           .filter((m) => !busy.has(`${eventId}:${m}`))
           .sort(
             (a, b) =>
+              Number(missesPractice(eventId, a)) - Number(missesPractice(eventId, b)) ||
               (perSession.get(a) ?? 0) - (perSession.get(b) ?? 0) ||
               (total.get(a) ?? 0) - (total.get(b) ?? 0) ||
               (weeksAvailable.get(a) ?? 0) - (weeksAvailable.get(b) ?? 0) ||

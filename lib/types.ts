@@ -66,6 +66,9 @@ export type Assignment = {
 
 export type Guest = { id: string; event_id: string; session: Session; name: string };
 
+/** 관리자가 캘린더 날짜에 남긴 공지·메모 */
+export type CalendarNote = { id: string; date: string; content: string; created_by: string | null; created_at: string };
+
 /** 거주지 표시용. 예전 가입자는 구·동이 나뉘어 저장돼 있다 */
 export function formatAddress(m: Pick<Member, "district" | "dong">): string {
   return [m.district, m.dong].filter(Boolean).join(" ");
@@ -89,18 +92,24 @@ export const SPECIAL_STATUS_OPTIONS: { value: AvailabilityStatus; label: string 
 ];
 
 /**
- * 편성할 수 있는 응답인지. '토 불가'는 토 연습이 있는 주에는 편성하지 않는다
- * (연습 없는 주로 바꾸면 '토 불가' 응답은 '가능'으로 바뀐다)
+ * 편성할 수 있는 응답인지. '토 불가'도 주일에는 섬길 수 있으므로 편성할 수 있다
+ * (토 연습이 있는 주라면 '토 불참'으로 표시된다. missesPractice 참고)
  */
-export function canServe(status: AvailabilityStatus, event: LineupEvent): boolean {
-  if (status === "none") return false;
-  if (status === "sun_only") return !hasSaturdayPractice(event);
-  return true;
+export function canServe(status: AvailabilityStatus): boolean {
+  return status !== "none";
+}
+
+/** 토 연습이 있는 주에 '토 불가'로 답해 연습에 빠지는지 */
+export function missesPractice(status: AvailabilityStatus, event: LineupEvent): boolean {
+  return status === "sun_only" && hasSaturdayPractice(event);
 }
 
 /** SQL용 같은 규칙 (availabilities a 기준) */
-export const CAN_SERVE_SQL = `a.status <> 'none' and not (a.status = 'sun_only' and exists (
-  select 1 from event_days d where d.event_id = a.event_id and d.kind = 'practice'))`;
+export const CAN_SERVE_SQL = `a.status <> 'none'`;
+
+/** SQL용: 토 연습이 있는 주의 '토 불가' 응답 (availabilities a 기준) */
+export const MISSES_PRACTICE_SQL = `a.status = 'sun_only' and exists (
+  select 1 from event_days d where d.event_id = a.event_id and d.kind = 'practice')`;
 
 /** 토 연습이 있는 주일만 토·일을 나눠 묻고, 연습 없는 주일과 비주말 일정은 가능/불가로 받는다 */
 export function hasSaturdayPractice(event: LineupEvent): boolean {

@@ -180,7 +180,9 @@ export default async function AvailabilityPage({
                     })}
                   </div>
                   {hasSaturdayPractice(event) && (
-                    <p className="mt-2 text-xs text-stone-500">토 연습에 못 오면(&apos;토 불가&apos;) 이 주는 라인업에 들어가지 않아요.</p>
+                    <p className="mt-2 text-xs text-stone-500">
+                      토 연습에 못 와도(&apos;토 불가&apos;) 주일 라인업에는 들어갈 수 있어요. 토 연습에 오는 팀원을 먼저 배정해요.
+                    </p>
                   )}
 
                   <details className="group mt-3 rounded-xl border border-stone-200 bg-white" open={!answer}>

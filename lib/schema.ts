@@ -127,6 +127,16 @@ create table if not exists sheet_files (
 );
 create index if not exists sheet_files_song_idx on sheet_files (song_id);
 
+-- 관리자가 캘린더 날짜에 남기는 공지·메모
+create table if not exists calendar_notes (
+  id uuid primary key default gen_random_uuid(),
+  date date not null,
+  content text not null,
+  created_by uuid references members (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists calendar_notes_date_idx on calendar_notes (date);
+
 -- 관리자가 고치는 문구 (예: 성찬식 공지)
 create table if not exists app_settings (
   key text primary key,
