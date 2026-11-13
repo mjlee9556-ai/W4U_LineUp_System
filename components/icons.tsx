@@ -144,3 +144,27 @@ export const MegaphoneIcon = (p: IconProps) => (
 export const StarIcon = (p: IconProps) => (
   <Svg {...p}><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9L12 3Z" /></Svg>
 );
+export const SparklesIcon = (p: IconProps) => (
+  <Svg {...p}><path d="m11 4 1.8 5.2L18 11l-5.2 1.8L11 18l-1.8-5.2L4 11l5.2-1.8z" /><path d="M19 3v4M21 5h-4M18 17v4M20 19h-4" /></Svg>
+);
+export const TrashIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></Svg>
+);
+export const XIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M18 6 6 18M6 6l12 12" /></Svg>
+);
+export const LightbulbIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z" /></Svg>
+);
+export const TableIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18" /></Svg>
+);
+export const SlidersIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></Svg>
+);
+export const AlertTriangleIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01" /></Svg>
+);
+export const UserPlusIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6M22 11h-6" /></Svg>
+);

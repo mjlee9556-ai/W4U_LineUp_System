@@ -28,33 +28,40 @@ export function ServeCountTable({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-stone-200 bg-white">
-      <table className="w-full text-center text-sm">
-        <thead className="bg-stone-50 text-xs text-stone-500">
+      <table className="w-full text-center text-[13px]">
+        <thead className="border-b border-stone-200 bg-stone-50 text-[11px] font-bold text-stone-500">
           <tr>
-            <th className="px-2 py-2 text-left font-normal">이름</th>
+            <th className="whitespace-nowrap px-3 py-2.5 text-left">팀원 이름</th>
             {sessions.map((s) => (
-              <th key={s} className="px-2 py-2 font-normal">{SESSION_SHORT[s]}</th>
+              <th key={s} className="whitespace-nowrap px-2 py-2.5">{SESSION_SHORT[s]}</th>
             ))}
-            <th className="px-2 py-2 font-semibold text-stone-700">합계</th>
+            <th className="whitespace-nowrap px-3 py-2.5 text-right text-stone-700">월간 합계</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-stone-100">
           {rows.map((m) => (
             <tr key={m.id}>
-              <td className="whitespace-nowrap px-2 py-1.5 text-left">{m.name}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-left">
+                <span className="flex items-center gap-2 font-semibold text-ink-900">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink-900 text-[10px] font-bold text-white">
+                    {m.name.trim().slice(0, 1)}
+                  </span>
+                  {m.name}
+                </span>
+              </td>
               {sessions.map((s) => {
                 const k = `${m.id}:${s}`;
                 const n = count.get(k) ?? 0;
                 const avail = availableWeeks?.get(k);
-                if (!n && !avail) return <td key={s} className="px-2 py-1.5 text-stone-200">·</td>;
+                if (!n && !avail) return <td key={s} className="px-2 py-2.5 text-stone-300">-</td>;
                 return (
-                  <td key={s} className="whitespace-nowrap px-2 py-1.5">
-                    <span className={n ? "font-semibold" : "text-stone-400"}>{n}</span>
-                    {avail !== undefined && <span className="text-xs text-stone-400">/{avail}</span>}
+                  <td key={s} className="whitespace-nowrap px-2 py-2.5">
+                    <span className={n ? "font-extrabold text-ink-900" : "text-stone-400"}>{n}</span>
+                    {avail !== undefined && <span className="text-[11px] text-stone-400">/{avail}</span>}
                   </td>
                 );
               })}
-              <td className="px-2 py-1.5 font-semibold">{m.total}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-right font-extrabold text-ink-900">{m.total}회</td>
             </tr>
           ))}
         </tbody>

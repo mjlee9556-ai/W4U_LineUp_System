@@ -59,3 +59,12 @@ export const SESSION_GROUPS: { key: string; label: string; sessions: Session[] }
 
 /** 매주 채워야 하는 세션 (서브 인도자는 있으면 좋은 자리라 빼고 센다) */
 export const REQUIRED_SESSIONS: readonly Session[] = SIGNUP_SESSIONS;
+
+/** 자동 배정을 나눠 돌릴 때의 묶음: 보컬 / 악기. 인도자·서브 인도자는 자동 배정하지 않고 관리자가 직접 정한다 */
+export const VOICE_SESSIONS: readonly Session[] = ["vocal"];
+export const INSTRUMENT_SESSIONS: readonly Session[] = ["main_keys", "second_keys", "bass", "electric", "acoustic", "drums"];
+
+/** 자동 배정 화면의 파트별 한 주 인원 기본값 (나머지는 1명) */
+export const AUTO_ASSIGN_SESSIONS: readonly Session[] = [...VOICE_SESSIONS, ...INSTRUMENT_SESSIONS];
+
+export const AUTO_ASSIGN_DEFAULT_COUNT: Partial<Record<Session, number>> = { vocal: 5, acoustic: 0 };

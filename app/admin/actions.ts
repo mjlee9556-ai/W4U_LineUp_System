@@ -10,7 +10,7 @@ import { addDays, isValidMonth, monthStart, todayKST, weekendSets } from "@/lib/
 import { hashPin } from "@/lib/pin";
 import { autoAssign } from "@/lib/autoassign";
 import { parseGuestNames } from "@/lib/lineup";
-import { isSession, SESSIONS, SIGNUP_SESSIONS, type Session } from "@/lib/sessions";
+import { INSTRUMENT_SESSIONS, isSession, SESSIONS, SIGNUP_SESSIONS, VOICE_SESSIONS, type Session } from "@/lib/sessions";
 import { CAN_SERVE_SQL, type EventType, type MemberStatus } from "@/lib/types";
 
 export async function setMemberStatus(formData: FormData) {
@@ -192,7 +192,10 @@ export async function toggleSaturdayPractice(formData: FormData) {
     return event.round_id;
   });
 
-  if (roundId) revalidatePath(`/admin/rounds/${roundId}`);
+  if (roundId) {
+    revalidatePath(`/admin/rounds/${roundId}`);
+    revalidatePath(`/admin/rounds/${roundId}/practice`);
+  }
   revalidatePath("/availability");
   revalidatePath("/calendar");
 }
@@ -290,12 +293,20 @@ export async function deleteEvent(formData: FormData) {
 
 /**
  * 회차의 편성 중인 주들을 파트별로 자동 배정한다. 확정된 주는 그대로 두고 횟수 계산에만 넣는다.
- * 편성 중인 주의 팀원 배정은 새로 채우고, 게스트는 남겨 둔다.
+ * scope로 고른 묶음(보컬 / 악기 = 건반·기타·베이스·드럼)의 배정만 새로 채운다.
+ * 고르지 않은 파트와 인도자·서브 인도자(항상 직접 지정)는 그대로 두고 횟수·'한 주 한 파트' 계산에만 넣는다.
+ * 게스트는 남겨 둔다.
  */
 export async function autoAssignRound(formData: FormData) {
   await requireAdmin();
   const roundId = String(formData.get("round_id"));
-  const sessions = SIGNUP_SESSIONS.map((session) => {
+  const scope = new Set(formData.getAll("scope").map(String));
+  const targets = new Set<Session>([
+    ...(scope.has("vocal") ? VOICE_SESSIONS : []),
+    ...(scope.has("instrument") ? INSTRUMENT_SESSIONS : []),
+  ]);
+  if (!targets.size) redirect(`/admin/rounds/${roundId}?error=scope#auto`);
+  const sessions = SIGNUP_SESSIONS.filter((s) => targets.has(s)).map((session) => {
     const n = Number(formData.get(`count:${session}`));
     return { session, count: Number.isFinite(n) ? Math.min(Math.max(Math.trunc(n), 0), 5) : 1 };
   });
@@ -319,14 +330,15 @@ export async function autoAssignRound(formData: FormData) {
         [ids],
       )
     ).rows;
+    // 확정된 주의 배정 + 편성 중인 주에서 이번에 안 건드리는 파트(인도자 포함)의 배정
     const fixed = (
-      await tx.query<{ event_id: string; member_id: string; session: Session }>(
-        `select a.event_id, a.member_id, a.session
+      await tx.query<{ event_id: string; member_id: string; session: Session; lineup_status: string }>(
+        `select a.event_id, a.member_id, a.session, e.lineup_status
            from lineup_assignments a join events e on e.id = a.event_id
-          where e.round_id = $1 and e.lineup_status = 'confirmed'`,
+          where e.round_id = $1`,
         [roundId],
       )
-    ).rows;
+    ).rows.filter((f) => f.lineup_status === "confirmed" || !targets.has(f.session));
 
     const rows = autoAssign({
       events: drafts,
@@ -336,7 +348,10 @@ export async function autoAssignRound(formData: FormData) {
       fixed: fixed.map((f) => ({ eventId: f.event_id, memberId: f.member_id, session: f.session })),
     });
 
-    await tx.query(`delete from lineup_assignments where event_id = any($1::uuid[])`, [drafts.map((e) => e.id)]);
+    await tx.query(`delete from lineup_assignments where event_id = any($1::uuid[]) and session = any($2::text[])`, [
+      drafts.map((e) => e.id),
+      [...targets],
+    ]);
     for (const r of rows) {
       await tx.query(`insert into lineup_assignments (event_id, member_id, session) values ($1, $2, $3)`, [
         r.eventId,
@@ -347,7 +362,7 @@ export async function autoAssignRound(formData: FormData) {
   });
 
   revalidatePath(`/admin/rounds/${roundId}`);
-  redirect(`/admin/rounds/${roundId}?saved=auto`);
+  redirect(`/admin/rounds/${roundId}?saved=auto&scope=${scope.has("vocal") && scope.has("instrument") ? "all" : scope.has("vocal") ? "vocal" : "instrument"}`);
 }
 
 /** 회차의 편성 중인 주를 한 번에 확정하고 공개한다 */
