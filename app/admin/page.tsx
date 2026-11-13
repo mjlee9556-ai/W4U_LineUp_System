@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { addDays, formatMonth, formatShort, shiftMonth, todayKST } from "@/lib/dates";
 import { SESSION_LABELS, type Session } from "@/lib/sessions";
-import { EVENT_TYPE_LABELS, formatAddress, roleLabel, type LineupEvent, type Member, type Round } from "@/lib/types";
+import { canApproveSignups, EVENT_TYPE_LABELS, formatAddress, roleLabel, type LineupEvent, type Member, type Round } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -30,6 +30,7 @@ const ERRORS: Record<string, string> = {
   round: "회차를 만들지 못했어요. 같은 달 회차가 이미 있는지 확인해 주세요.",
   closes: "마감일은 오늘 이후로 골라 주세요.",
   event: "일정 정보를 다시 확인해 주세요.",
+  approve: "가입 승인·거절은 최종 관리자와 찬양팀장만 할 수 있어요.",
 };
 
 type InviteCode = { code: string; expires_at: string | null; max_uses: number | null; used_count: number };
@@ -37,6 +38,7 @@ type InviteCode = { code: string; expires_at: string | null; max_uses: number | 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ error?: string; deleted?: string; saved?: string }> }) {
   const { member } = await requireAdmin();
   const { error, deleted, saved } = await searchParams;
+  const approver = canApproveSignups(member);
 
   const [pending, codes, rounds, specials, [{ count: approvedCount }]] = await Promise.all([
     query<Member & { sessions: Session[] }>(
@@ -220,6 +222,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             </span>
           }
         >
+          {!approver && pending.length > 0 && (
+            <p className="mb-2 rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-500">가입 승인·거절은 최종 관리자와 찬양팀장이 할 수 있어요.</p>
+          )}
           {pending.length === 0 ? (
             <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-stone-300 bg-stone-50/60 py-7 text-center">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-sage-50 text-sage-700">
@@ -239,6 +244,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                       {formatAddress(m) && ` · ${formatAddress(m)}`}
                     </div>
                   </div>
+                  {approver && (
                   <div className="flex shrink-0 gap-1">
                     <form action={setMemberStatus}>
                       <input type="hidden" name="member_id" value={m.id} />
@@ -255,6 +261,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                       </SubmitButton>
                     </form>
                   </div>
+                  )}
                 </li>
               ))}
             </ul>

@@ -1,9 +1,10 @@
 import "server-only";
 import { isAdmin } from "@/lib/types";
 import { query } from "@/lib/db";
-import { addDays, parseISODate, todayKST, weekOfMonthLabel } from "@/lib/dates";
-import { buildLineup, serviceDates, type LineupEntry } from "@/lib/lineup";
-import { getMemberNames, withDays } from "@/lib/queries";
+import { addDays, monthStart, parseISODate, shiftMonth, todayKST, weekOfMonthLabel } from "@/lib/dates";
+import { buildLineup, practiceDates, serviceDates, type LineupEntry } from "@/lib/lineup";
+import { getEventsBetween, getMemberNames, withDays } from "@/lib/queries";
+import { REQUIRED_SESSIONS, type Session } from "@/lib/sessions";
 import type { Assignment, Guest, LineupEvent, Member } from "@/lib/types";
 
 /** 일정의 대표 날짜(마지막 예배일) */
@@ -49,3 +50,38 @@ export function eventLabel(event: LineupEvent): string {
   return `${d.getUTCFullYear()}년 ${name} (${md})${event.lineup_status === "draft" ? " · 편성 중" : ""}`;
 }
 
+
+/**
+ * 한 달의 주차별 라인업 현황 (라인업 탭 월 캘린더용).
+ * 팀원은 확정된 일정만, 관리자는 편성 중인 일정도 본다.
+ */
+export async function getMonthWeeks(month: string, member: Pick<Member, "role">) {
+  const from = monthStart(month);
+  const to = addDays(monthStart(shiftMonth(month, 1)), -1);
+  const events = (await getEventsBetween(from, to)).filter(
+    (e) => mainDate(e).startsWith(month) && (isAdmin(member) || e.lineup_status === "confirmed"),
+  );
+  const ids = events.map((e) => e.id);
+  const [assigned, guests] = ids.length
+    ? await Promise.all([
+        query<{ event_id: string; member_id: string; session: Session }>(
+          `select event_id, member_id, session from lineup_assignments where event_id = any($1::uuid[])`,
+          [ids],
+        ),
+        query<{ event_id: string; session: Session }>(`select event_id, session from lineup_guests where event_id = any($1::uuid[])`, [ids]),
+      ])
+    : [[], []];
+  const weeks = events.map((e) => {
+    const sessions = new Set([...assigned, ...guests].filter((a) => a.event_id === e.id).map((a) => a.session));
+    return {
+      id: e.id,
+      date: mainDate(e),
+      practiceDates: practiceDates(e),
+      confirmed: e.lineup_status === "confirmed",
+      filled: REQUIRED_SESSIONS.filter((s) => sessions.has(s)).length,
+      required: REQUIRED_SESSIONS.length,
+      people: new Set(assigned.filter((a) => a.event_id === e.id).map((a) => a.member_id)).size + guests.filter((g) => g.event_id === e.id).length,
+    };
+  });
+  return { events, weeks };
+}

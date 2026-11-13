@@ -85,6 +85,11 @@ export function isOwner(m: Pick<Member, "role">): boolean {
   return m.role === "owner";
 }
 
+/** 가입 승인 대기자 승인·거절: 최종 관리자와 찬양팀장만 */
+export function canApproveSignups(m: Pick<Member, "role" | "admin_title">): boolean {
+  return m.role === "owner" || (m.role === "admin" && m.admin_title === "찬양팀장");
+}
+
 /** 화면에 보일 권한 이름 */
 export function roleLabel(m: Pick<Member, "role" | "admin_title">): string {
   if (m.role === "owner") return "최종 관리자";
