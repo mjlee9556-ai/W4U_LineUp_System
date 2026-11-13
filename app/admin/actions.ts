@@ -4,7 +4,7 @@ import { randomInt } from "crypto";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireAdmin, requireOwner } from "@/lib/auth";
+import { requireAdmin, requireApprover, requireOwner } from "@/lib/auth";
 import { query, queryOne, transaction } from "@/lib/db";
 import { addDays, isValidMonth, monthStart, todayKST, weekendSets } from "@/lib/dates";
 import { hashPin, isValidPhone, isValidPin, normalizePhone } from "@/lib/pin";
@@ -15,7 +15,7 @@ import { ADMIN_TITLES, CAN_SERVE_SQL, MISSES_PRACTICE_SQL, type EventType, type 
 
 /**
  * 팀원 상태 바꾸기.
- * 가입 승인 대기자의 승인·거절은 준관리자도 할 수 있고, 이미 가입한 팀원의 비활성화·다시 활성화는 최종 관리자만 한다.
+ * 가입 승인 대기자의 승인·거절은 최종 관리자와 찬양팀장이, 이미 가입한 팀원의 비활성화·다시 활성화는 최종 관리자만 한다.
  */
 export async function setMemberStatus(formData: FormData) {
   const id = String(formData.get("member_id"));
@@ -23,7 +23,7 @@ export async function setMemberStatus(formData: FormData) {
   if (!["approved", "inactive", "pending"].includes(status)) return;
   const target = await queryOne<{ status: MemberStatus; role: string }>(`select status, role from members where id = $1`, [id]);
   if (!target) return;
-  if (target.status === "pending") await requireAdmin();
+  if (target.status === "pending") await requireApprover();
   else await requireOwner();
   // 최종 관리자 계정은 비활성화할 수 없다 (관리자가 아무도 없게 되는 일을 막는다)
   if (target.role === "owner" && status !== "approved") redirect("/admin/members?error=owner-self");
@@ -348,81 +348,123 @@ export async function deleteEvent(formData: FormData) {
   redirect("/admin?deleted=event");
 }
 
-/**
- * 회차의 편성 중인 주들을 파트별로 자동 배정한다. 확정된 주는 그대로 두고 횟수 계산에만 넣는다.
- * scope로 고른 묶음(보컬 / 악기 = 건반·기타·베이스·드럼)의 배정만 새로 채운다.
- * 고르지 않은 파트와 인도자·서브 인도자(항상 직접 지정)는 그대로 두고 횟수·'한 주 한 파트' 계산에만 넣는다.
- * 게스트는 남겨 둔다.
- */
-export async function autoAssignRound(formData: FormData) {
-  await requireAdmin();
-  const roundId = String(formData.get("round_id"));
+type Tx = Parameters<Parameters<typeof transaction>[0]>[0];
+
+/** 자동 배정 폼(범위 체크박스·파트별 인원)을 읽는다 */
+function readAutoAssignForm(formData: FormData) {
   const scope = new Set(formData.getAll("scope").map(String));
   const targets = new Set<Session>([
     ...(scope.has("vocal") ? VOICE_SESSIONS : []),
     ...(scope.has("instrument") ? INSTRUMENT_SESSIONS : []),
   ]);
-  if (!targets.size) redirect(`/admin/rounds/${roundId}?error=scope#auto`);
   const sessions = SIGNUP_SESSIONS.filter((s) => targets.has(s)).map((session) => {
     const n = Number(formData.get(`count:${session}`));
     return { session, count: Number.isFinite(n) ? Math.min(Math.max(Math.trunc(n), 0), 5) : 1 };
   });
+  const label = scope.has("vocal") && scope.has("instrument") ? "all" : scope.has("vocal") ? "vocal" : "instrument";
+  return { targets, sessions, label };
+}
 
-  await transaction(async (tx) => {
-    const events = (
-      await tx.query<{ id: string; lineup_status: string }>(
-        `select id, lineup_status from events where round_id = $1 and type = 'weekend' order by start_date`,
-        [roundId],
-      )
-    ).rows;
-    const drafts = events.filter((e) => e.lineup_status === "draft");
-    if (!drafts.length) return;
+/**
+ * 회차의 편성 중인 주(onlyEventIds를 주면 그 주만)를 파트별로 자동 배정한다.
+ * 고른 묶음(보컬 / 악기)의 배정만 새로 채우고, 그 밖의 배정(다른 주, 고르지 않은 파트, 인도자)은
+ * 그대로 두고 횟수·'한 주 한 파트' 계산에만 넣는다. 게스트는 남겨 둔다.
+ */
+async function runAutoAssign(
+  tx: Tx,
+  roundId: string,
+  targets: Set<Session>,
+  sessions: { session: Session; count: number }[],
+  onlyEventIds?: string[],
+) {
+  const events = (
+    await tx.query<{ id: string; lineup_status: string }>(
+      `select id, lineup_status from events where round_id = $1 and type = 'weekend' order by start_date`,
+      [roundId],
+    )
+  ).rows;
+  const drafts = events.filter((e) => e.lineup_status === "draft" && (!onlyEventIds || onlyEventIds.includes(e.id)));
+  if (!drafts.length) return 0;
+  const draftIds = new Set(drafts.map((e) => e.id));
 
-    const ids = events.map((e) => e.id);
-    const answers = (
-      await tx.query<{ event_id: string; member_id: string; status: string; sessions: Session[]; misses_practice: boolean }>(
-        `select a.event_id, a.member_id, a.status, a.sessions, (${MISSES_PRACTICE_SQL}) as misses_practice
-           from availabilities a join members m on m.id = a.member_id and m.status = 'approved'
-          where a.event_id = any($1::uuid[]) and ${CAN_SERVE_SQL}`,
-        [ids],
-      )
-    ).rows;
-    // 확정된 주의 배정 + 편성 중인 주에서 이번에 안 건드리는 파트(인도자 포함)의 배정
-    const fixed = (
-      await tx.query<{ event_id: string; member_id: string; session: Session; lineup_status: string }>(
-        `select a.event_id, a.member_id, a.session, e.lineup_status
-           from lineup_assignments a join events e on e.id = a.event_id
-          where e.round_id = $1`,
-        [roundId],
-      )
-    ).rows.filter((f) => f.lineup_status === "confirmed" || !targets.has(f.session));
+  const answers = (
+    await tx.query<{ event_id: string; member_id: string; sessions: Session[]; misses_practice: boolean }>(
+      `select a.event_id, a.member_id, a.sessions, (${MISSES_PRACTICE_SQL}) as misses_practice
+         from availabilities a join members m on m.id = a.member_id and m.status = 'approved'
+        where a.event_id = any($1::uuid[]) and ${CAN_SERVE_SQL}`,
+      [drafts.map((e) => e.id)],
+    )
+  ).rows;
+  // 이번에 새로 채우지 않는 배정은 모두 고정: 공평하게 나눌 때 횟수에 넣는다
+  const fixed = (
+    await tx.query<{ event_id: string; member_id: string; session: Session }>(
+      `select a.event_id, a.member_id, a.session
+         from lineup_assignments a join events e on e.id = a.event_id
+        where e.round_id = $1`,
+      [roundId],
+    )
+  ).rows.filter((f) => !(draftIds.has(f.event_id) && targets.has(f.session)));
 
-    const absent = new Set(answers.filter((a) => a.misses_practice).map((a) => `${a.event_id}:${a.member_id}`));
-    const rows = autoAssign({
-      events: drafts,
-      sessions,
-      candidates: (eventId, session) =>
-        answers.filter((a) => a.event_id === eventId && a.sessions.includes(session)).map((a) => a.member_id),
-      fixed: fixed.map((f) => ({ eventId: f.event_id, memberId: f.member_id, session: f.session })),
-      missesPractice: (eventId, memberId) => absent.has(`${eventId}:${memberId}`),
-    });
-
-    await tx.query(`delete from lineup_assignments where event_id = any($1::uuid[]) and session = any($2::text[])`, [
-      drafts.map((e) => e.id),
-      [...targets],
-    ]);
-    for (const r of rows) {
-      await tx.query(`insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)`, [
-        r.eventId,
-        r.memberId,
-        r.session,
-        absent.has(`${r.eventId}:${r.memberId}`),
-      ]);
-    }
+  const absent = new Set(answers.filter((a) => a.misses_practice).map((a) => `${a.event_id}:${a.member_id}`));
+  const rows = autoAssign({
+    events: drafts,
+    sessions,
+    candidates: (eventId, session) =>
+      answers.filter((a) => a.event_id === eventId && a.sessions.includes(session)).map((a) => a.member_id),
+    fixed: fixed.map((f) => ({ eventId: f.event_id, memberId: f.member_id, session: f.session })),
+    missesPractice: (eventId, memberId) => absent.has(`${eventId}:${memberId}`),
   });
 
+  await tx.query(`delete from lineup_assignments where event_id = any($1::uuid[]) and session = any($2::text[])`, [
+    [...draftIds],
+    [...targets],
+  ]);
+  for (const r of rows) {
+    await tx.query(`insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)`, [
+      r.eventId,
+      r.memberId,
+      r.session,
+      absent.has(`${r.eventId}:${r.memberId}`),
+    ]);
+  }
+  return drafts.length;
+}
+
+/** 응답 현황 화면: 회차의 편성 중인 주를 모두 자동 배정 */
+export async function autoAssignRound(formData: FormData) {
+  await requireAdmin();
+  const roundId = String(formData.get("round_id"));
+  const { targets, sessions, label } = readAutoAssignForm(formData);
+  if (!targets.size) redirect(`/admin/rounds/${roundId}?error=scope#auto`);
+
+  await transaction((tx) => runAutoAssign(tx, roundId, targets, sessions));
+
   revalidatePath(`/admin/rounds/${roundId}`);
-  redirect(`/admin/rounds/${roundId}?saved=auto&scope=${scope.has("vocal") && scope.has("instrument") ? "all" : scope.has("vocal") ? "vocal" : "instrument"}`);
+  revalidatePath("/lineup");
+  redirect(`/admin/rounds/${roundId}?saved=auto&scope=${label}`);
+}
+
+/** 라인업 화면: 한 주만 자동 배정 (같은 달 다른 주의 배정은 공평 분배 계산에만 넣는다) */
+export async function autoAssignEvent(formData: FormData) {
+  await requireAdmin();
+  const eventId = String(formData.get("event_id"));
+  const back = `/lineup?event=${eventId}`;
+  const { targets, sessions, label } = readAutoAssignForm(formData);
+  if (!targets.size) redirect(`${back}&error=scope#week-assign`);
+
+  const event = await queryOne<{ round_id: string | null; type: string; lineup_status: string }>(
+    `select round_id, type, lineup_status from events where id = $1`,
+    [eventId],
+  );
+  if (!event?.round_id || event.type !== "weekend" || event.lineup_status !== "draft") redirect(`${back}&error=auto`);
+  const roundId = event.round_id;
+
+  await transaction((tx) => runAutoAssign(tx, roundId, targets, sessions, [eventId]));
+
+  revalidatePath("/lineup");
+  revalidatePath(`/admin/rounds/${roundId}`);
+  revalidatePath(`/admin/events/${eventId}`);
+  redirect(`${back}&saved=auto&scope=${label}`);
 }
 
 /** 회차의 편성 중인 주를 한 번에 확정하고 공개한다 */

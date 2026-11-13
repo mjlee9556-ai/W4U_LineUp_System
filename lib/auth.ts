@@ -1,5 +1,5 @@
 import "server-only";
-import { isAdmin, isOwner } from "@/lib/types";
+import { canApproveSignups, isAdmin, isOwner } from "@/lib/types";
 import { createHash, randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -67,6 +67,13 @@ export async function requireMember() {
 export async function requireAdmin() {
   const ctx = await requireMember();
   if (!isAdmin(ctx.member)) redirect("/");
+  return ctx;
+}
+
+/** 가입 승인 대기자 승인·거절: 최종 관리자와 찬양팀장 */
+export async function requireApprover() {
+  const ctx = await requireMember();
+  if (!canApproveSignups(ctx.member)) redirect(isAdmin(ctx.member) ? "/admin?error=approve" : "/");
   return ctx;
 }
 

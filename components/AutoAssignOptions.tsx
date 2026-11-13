@@ -16,7 +16,7 @@ import { CheckIcon, SparklesIcon } from "@/components/icons";
  * 자동 배정 범위(보컬 / 악기 / 모두) 체크박스와 파트별 한 주 인원 칸.
  * 고르지 않은 묶음의 칸은 흐리게 두고, 서버에서도 그 파트 배정은 건드리지 않는다.
  */
-export function AutoAssignOptions({ draftCount }: { draftCount: number }) {
+export function AutoAssignOptions({ draftCount, single = false }: { draftCount: number; single?: boolean }) {
   const [vocal, setVocal] = useState(true);
   const [instrument, setInstrument] = useState(true);
   const all = vocal && instrument;
@@ -79,14 +79,15 @@ export function AutoAssignOptions({ draftCount }: { draftCount: number }) {
           </p>
         ) : (
           <ConfirmSubmitButton
-            confirmMessage={`편성 중인 ${draftCount}주의 ${scopeLabel} 배정을 자동으로 새로 채울까요?\n\n그 파트는 직접 고친 배정도 다시 정해져요. 인도자, ${
+            confirmMessage={`${single ? "이 주" : `편성 중인 ${draftCount}주`}의 ${scopeLabel} 배정을 자동으로 새로 채울까요?\n\n그 파트는 직접 고친 배정도 다시 정해져요. 인도자, ${
               all ? "" : "고르지 않은 파트, "
             }확정된 주와 게스트는 그대로예요.`}
             pendingText="배정 중…"
             className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-ink-900 text-sm font-bold text-white shadow-sm transition hover:bg-navy-800 disabled:opacity-60"
           >
             <SparklesIcon size={18} />
-            {all ? "스마트 자동 배정 실행하기" : `${vocal ? "보컬" : "악기"} 자동 배정 실행하기`}
+            {single ? "이 주 " : ""}
+            {all ? (single ? "자동 배정하기" : "스마트 자동 배정 실행하기") : `${vocal ? "보컬" : "악기"} 자동 배정${single ? "하기" : " 실행하기"}`}
           </ConfirmSubmitButton>
         )
       ) : (
