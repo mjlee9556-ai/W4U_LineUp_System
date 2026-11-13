@@ -1,7 +1,17 @@
 "use client";
 
 /** 전화번호는 숫자만: 하이픈·공백을 입력하거나 붙여 넣으면 바로 지운다 */
-export function PhoneInput({ id = "phone", name = "phone", className = "input" }: { id?: string; name?: string; className?: string }) {
+export function PhoneInput({
+  id = "phone",
+  name = "phone",
+  className = "input",
+  defaultValue,
+}: {
+  id?: string;
+  name?: string;
+  className?: string;
+  defaultValue?: string;
+}) {
   return (
     <input
       id={id}
@@ -9,6 +19,7 @@ export function PhoneInput({ id = "phone", name = "phone", className = "input" }
       type="tel"
       inputMode="numeric"
       required
+      defaultValue={defaultValue}
       autoComplete="tel"
       pattern="01[0-9]{8,9}"
       title="- 없이 숫자만 입력해 주세요 (예: 01012345678)"
