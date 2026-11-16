@@ -10,11 +10,8 @@ export type AvailabilityStatus = "both" | "sun_only" | "available" | "none";
 export type Member = {
   id: string;
   name: string;
-  birth_date: string | null;
   phone: string;
   email: string | null;
-  district: string | null; // 거주지 (예: 수원시 장안구 조원동). 예전 가입자는 구만 들어 있다
-  dong: string | null;
   role: MemberRole;
   /** 준관리자 직함 (찬양팀장 등). 최종 관리자가 정한다 */
   admin_title: string | null;
@@ -97,10 +94,6 @@ export function roleLabel(m: Pick<Member, "role" | "admin_title">): string {
   return "팀원";
 }
 
-/** 거주지 표시용. 예전 가입자는 구·동이 나뉘어 저장돼 있다 */
-export function formatAddress(m: Pick<Member, "district" | "dong">): string {
-  return [m.district, m.dong].filter(Boolean).join(" ");
-}
 
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   weekend: "주일",

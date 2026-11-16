@@ -5,10 +5,7 @@ create table if not exists members (
   name text not null,
   phone text not null unique,          -- 숫자만 저장 (로그인 아이디)
   pin_hash text not null,
-  birth_date date,
   email text,
-  district text,
-  dong text,
   role text not null default 'member' check (role in ('member', 'admin')),
   status text not null default 'pending' check (status in ('pending', 'approved', 'inactive')),
   privacy_agreed_at timestamptz,
@@ -166,4 +163,9 @@ update members set role = 'owner'
 delete from member_sessions where session in ('sound', 'media');
 update availabilities set sessions = array_remove(array_remove(sessions, 'sound'), 'media')
  where sessions && array['sound', 'media'];
+
+-- 생년월일·거주지는 더 이상 받지 않는다. 이미 가입한 회원의 값도 컬럼째 지운다 (되돌릴 수 없음)
+alter table members drop column if exists birth_date;
+alter table members drop column if exists district;
+alter table members drop column if exists dong;
 `;
