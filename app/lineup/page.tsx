@@ -7,7 +7,8 @@ import { DEFAULT_COMMUNION_NOTICE, getSetlists, getSetting } from "@/lib/setlist
 import { EVENT_TYPE_LABELS, isAdmin as canManage } from "@/lib/types";
 import { eventLabel, getLineup, getMonthWeeks, getPartSaves, getSelectableEvents, mainDate, pickCurrent } from "@/lib/week";
 import { AppShell } from "@/components/AppShell";
-import { autoAssignEvent, confirmEventLineup } from "@/app/admin/actions";
+import { autoAssignEvent, confirmEventLineup, resetLineup } from "@/app/admin/actions";
+import { query } from "@/lib/db";
 import { AutoAssignOptions } from "@/components/AutoAssignOptions";
 import { EventPicker } from "@/components/EventPicker";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -27,6 +28,7 @@ import {
   SlidersIcon,
   SparklesIcon,
   StarIcon,
+  TrashIcon,
   UsersIcon,
 } from "@/components/icons";
 
@@ -40,14 +42,24 @@ const GROUP_TONE: Record<string, string> = {
 const initial = (name: string) => name.trim().slice(0, 1);
 
 const SCOPE_LABEL: Record<string, string> = { all: "보컬·악기", vocal: "보컬", instrument: "악기" };
+const RESET_LABEL: Record<string, string> = { all: "전체", vocal: "보컬", instrument: "악기" };
 
 export default async function LineupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ event?: string; month?: string; saved?: string; scope?: string; error?: string; auto?: string }>;
+  searchParams: Promise<{
+    event?: string;
+    month?: string;
+    saved?: string;
+    scope?: string;
+    error?: string;
+    auto?: string;
+    period?: string;
+    part?: string;
+  }>;
 }) {
   const { member } = await requireMember();
-  const { event: wanted, month: wantedMonth, saved, scope, error, auto } = await searchParams;
+  const { event: wanted, month: wantedMonth, saved, scope, error, auto, period, part } = await searchParams;
   const isAdmin = canManage(member);
 
   const events = await getSelectableEvents(member);
@@ -77,10 +89,17 @@ export default async function LineupPage({
     );
   }
 
-  const [lineup, setlists, partSaves] = await Promise.all([
+  const [lineup, setlists, partSaves, monthDraftCount] = await Promise.all([
     getLineup(event.id),
     getSetlists([event.id]),
     isAdmin ? getPartSaves([event.id]) : Promise.resolve([]),
+    // 같은 달(회차)에서 아직 편성 중인 주 수: 월 전체 자동 배정·초기화에 쓴다
+    isAdmin && event.round_id
+      ? query<{ n: number }>(
+          `select count(*)::int as n from events where round_id = $1 and type = 'weekend' and lineup_status = 'draft'`,
+          [event.round_id],
+        ).then((r) => r[0]?.n ?? 0)
+      : Promise.resolve(0),
   ]);
   const unsavedParts = (["vocal", "instrument"] as const).filter((p) => !partSaves.some((x) => x.part === p));
   const songCount = setlists.get(event.id)?.length ?? 0;
@@ -129,7 +148,17 @@ export default async function LineupPage({
 
       <div className="mt-4">
         <Notice
-          message={saved === "confirm" ? "보컬·악기 배정을 합쳐 라인업을 확정했어요. 팀원 캘린더에 바로 보여요." : saved === "auto" ? `이 주 ${SCOPE_LABEL[scope ?? "all"] ?? ""} 자동 배정을 마쳤어요. 아래 명단을 확인하고, 고칠 곳은 '수동 배정'에서 바꾸거나 확정해 주세요.` : undefined}
+          message={
+            saved === "confirm"
+              ? "보컬·악기 배정을 합쳐 라인업을 확정했어요. 팀원 캘린더에 바로 보여요."
+              : saved === "auto"
+                ? `이 주 ${SCOPE_LABEL[scope ?? "all"] ?? ""} 자동 배정을 마쳤어요. 아래 명단을 확인하고, 고칠 곳은 '수동 배정'에서 바꾸거나 확정해 주세요.`
+                : saved === "auto-month"
+                  ? `이 달 편성 중인 주 전체의 ${SCOPE_LABEL[scope ?? "all"] ?? ""} 자동 배정을 마쳤어요. 위 월간 표에서 주차별로 확인해 주세요.`
+                  : saved === "reset"
+                    ? `${period === "month" ? "이 달 편성 중인 주 전체" : "이 주"}의 ${RESET_LABEL[part ?? "all"] ?? ""} 배정을 초기화했어요.`
+                    : undefined
+          }
         />
         <Notice
           tone="error"
@@ -138,7 +167,13 @@ export default async function LineupPage({
               ? "자동 배정할 범위(보컬·악기)를 하나 이상 골라 주세요."
               : error === "auto"
                 ? "자동 배정은 회차에 속한 편성 중인 주일에만 할 수 있어요."
-                : undefined
+                : error === "reset-confirmed"
+                  ? "확정된 주는 초기화할 수 없어요. '수동 배정'에서 확정을 먼저 풀어 주세요."
+                  : error === "reset-month"
+                    ? "월 전체 초기화는 회차에 속한 주일에서만 할 수 있어요."
+                    : error === "reset"
+                      ? "초기화하지 못했어요. 다시 시도해 주세요."
+                      : undefined
           }
         />
         {board}
@@ -192,8 +227,27 @@ export default async function LineupPage({
               </summary>
               <form action={autoAssignEvent} className="space-y-4 border-t border-stone-100 px-3 pb-3 pt-3">
                 <input type="hidden" name="event_id" value={event.id} />
-                <AutoAssignOptions draftCount={1} single />
+                <AutoAssignOptions draftCount={1} single monthDraftCount={monthDraftCount} />
               </form>
+            </details>
+          )}
+          {(!confirmedWeek || monthDraftCount > 0) && (
+            <details
+              id="week-reset"
+              className="mt-3 scroll-mt-20 rounded-xl border border-stone-200 bg-stone-50/60 open:bg-white"
+              open={error?.startsWith("reset") || saved === "reset" || undefined}
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2.5 text-[13px] font-bold text-stone-700 [&::-webkit-details-marker]:hidden">
+                <TrashIcon size={14} />
+                배정 초기화 · 이 주 / 이 달 전체 / 보컬 / 악기
+              </summary>
+              <div className="space-y-3 border-t border-stone-100 px-3 pb-3 pt-3">
+                {!confirmedWeek && <ResetRow eventId={event.id} period="week" title="이 주" />}
+                {monthDraftCount > 0 && <ResetRow eventId={event.id} period="month" title={`이 달 전체 · 편성 중인 ${monthDraftCount}주`} />}
+                <p className="text-xs text-stone-500">
+                  &apos;전체&apos;는 인도자·서브 인도자·게스트까지 모두 비워요. 보컬·악기는 그 파트만 비워요. 확정된 주는 그대로예요.
+                </p>
+              </div>
             </details>
           )}
           {!canAutoAssign && !confirmedWeek && (
@@ -464,6 +518,40 @@ function Vacant({ label, href, compact = false }: { label: string; href?: string
           {compact ? "배정" : "팀원 배정"}
         </Link>
       )}
+    </div>
+  );
+}
+
+function ResetRow({ eventId, period, title }: { eventId: string; period: "week" | "month"; title: string }) {
+  const where = period === "month" ? "이 달 편성 중인 모든 주" : "이 주";
+  const buttons = [
+    { part: "all", label: period === "month" ? "월 전체 초기화" : "이 주 초기화", what: "인도자·보컬·악기·게스트 배정을 전부" },
+    { part: "vocal", label: "보컬 초기화", what: "보컬 배정을" },
+    { part: "instrument", label: "악기 초기화", what: "악기 배정을" },
+  ];
+  return (
+    <div>
+      <div className="mb-1.5 text-[12px] font-bold text-stone-600">{title}</div>
+      <div className="grid grid-cols-3 gap-2">
+        {buttons.map((b) => (
+          <form key={b.part} action={resetLineup}>
+            <input type="hidden" name="event_id" value={eventId} />
+            <input type="hidden" name="period" value={period} />
+            <input type="hidden" name="part" value={b.part} />
+            <ConfirmSubmitButton
+              confirmMessage={`${where}의 ${b.what} 지울까요?\n\n되돌릴 수 없어요. 확정된 주는 그대로예요.`}
+              pendingText="초기화 중…"
+              className={`flex h-10 w-full items-center justify-center rounded-xl border px-1 text-[12.5px] font-bold transition disabled:opacity-60 ${
+                b.part === "all"
+                  ? "border-ember-600/30 bg-ember-50 text-ember-600 hover:bg-ember-50/70"
+                  : "border-stone-300 bg-white text-ink-900 hover:bg-stone-50"
+              }`}
+            >
+              {b.label}
+            </ConfirmSubmitButton>
+          </form>
+        ))}
+      </div>
     </div>
   );
 }
