@@ -484,7 +484,10 @@ export async function autoAssignRound(formData: FormData) {
   redirect(`/admin/rounds/${roundId}?saved=auto&scope=${label}`);
 }
 
-/** 라인업 화면: 한 주만 자동 배정 (같은 달 다른 주의 배정은 공평 분배 계산에만 넣는다) */
+/**
+ * 라인업 화면: 자동 배정. 기본은 이 주만 (같은 달 다른 주의 배정은 공평 분배 계산에만 넣는다).
+ * period=month면 그 달(회차)의 편성 중인 주를 모두 새로 채운다.
+ */
 export async function autoAssignEvent(formData: FormData) {
   const { member } = await requireAdmin();
   const eventId = String(formData.get("event_id"));
@@ -499,12 +502,67 @@ export async function autoAssignEvent(formData: FormData) {
   if (!event?.round_id || event.type !== "weekend" || event.lineup_status !== "draft") redirect(`${back}&error=auto`);
   const roundId = event.round_id;
 
-  await transaction((tx) => runAutoAssign(tx, roundId, targets, sessions, member.id, [eventId]));
+  const month = formData.get("period") === "month";
+
+  await transaction((tx) => runAutoAssign(tx, roundId, targets, sessions, member.id, month ? undefined : [eventId]));
 
   revalidatePath("/lineup");
   revalidatePath(`/admin/rounds/${roundId}`);
-  revalidatePath(`/admin/events/${eventId}`);
-  redirect(`${back}&saved=auto&scope=${label}`);
+  revalidatePath("/admin/events/[id]", "page");
+  redirect(`${back}&saved=${month ? "auto-month" : "auto"}&scope=${label}`);
+}
+
+const RESET_SESSIONS: Record<string, readonly Session[]> = {
+  all: SESSIONS,
+  vocal: VOICE_SESSIONS,
+  instrument: INSTRUMENT_SESSIONS,
+};
+const RESET_PARTS: Record<string, Part[]> = { all: ["lead", "vocal", "instrument"], vocal: ["vocal"], instrument: ["instrument"] };
+
+/**
+ * 라인업 화면: 배정 초기화.
+ * period=week면 이 주만, month면 그 달(회차)의 편성 중인 주 전체. part=all이면 인도자·게스트까지 모두,
+ * vocal / instrument면 그 파트 배정(게스트 포함)만 지운다. 확정된 주는 건드리지 않는다.
+ */
+export async function resetLineup(formData: FormData) {
+  await requireAdmin();
+  const eventId = String(formData.get("event_id"));
+  const back = `/lineup?event=${eventId}`;
+  const period = formData.get("period") === "month" ? "month" : "week";
+  const part = String(formData.get("part"));
+  const sessions = RESET_SESSIONS[part];
+  if (!sessions) redirect(`${back}&error=reset#week-reset`);
+
+  const event = await queryOne<{ round_id: string | null; type: string; lineup_status: string }>(
+    `select round_id, type, lineup_status from events where id = $1`,
+    [eventId],
+  );
+  if (!event) redirect(`${back}&error=reset#week-reset`);
+  let ids: string[];
+  if (period === "month") {
+    if (!event.round_id) redirect(`${back}&error=reset-month#week-reset`);
+    ids = (
+      await query<{ id: string }>(`select id from events where round_id = $1 and type = 'weekend' and lineup_status = 'draft'`, [
+        event.round_id,
+      ])
+    ).map((r) => r.id);
+  } else {
+    if (event.lineup_status !== "draft") redirect(`${back}&error=reset-confirmed#week-reset`);
+    ids = [eventId];
+  }
+
+  if (ids.length) {
+    await transaction(async (tx) => {
+      await tx.query(`delete from lineup_assignments where event_id = any($1::uuid[]) and session = any($2::text[])`, [ids, [...sessions]]);
+      await tx.query(`delete from lineup_guests where event_id = any($1::uuid[]) and session = any($2::text[])`, [ids, [...sessions]]);
+      await tx.query(`delete from lineup_part_saves where event_id = any($1::uuid[]) and part = any($2::text[])`, [ids, RESET_PARTS[part]]);
+    });
+  }
+
+  revalidatePath("/lineup");
+  if (event.round_id) revalidatePath(`/admin/rounds/${event.round_id}`);
+  revalidatePath("/admin/events/[id]", "page");
+  redirect(`${back}&saved=reset&period=${period}&part=${part}`);
 }
 
 /** 회차의 편성 중인 주를 한 번에 확정하고 공개한다 */

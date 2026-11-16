@@ -16,7 +16,20 @@ import { CheckIcon, SparklesIcon } from "@/components/icons";
  * 자동 배정 범위(보컬 / 악기 / 모두) 체크박스와 파트별 한 주 인원 칸.
  * 고르지 않은 묶음의 칸은 흐리게 두고, 서버에서도 그 파트 배정은 건드리지 않는다.
  */
-export function AutoAssignOptions({ draftCount, single = false }: { draftCount: number; single?: boolean }) {
+export function AutoAssignOptions({
+  draftCount: weekDraftCount,
+  single: singleProp = false,
+  monthDraftCount,
+}: {
+  draftCount: number;
+  single?: boolean;
+  /** 주 화면에서 주면 '이 주만 / 이 달 전체' 고르기를 보여 준다 (그 달 편성 중인 주 수) */
+  monthDraftCount?: number;
+}) {
+  const [period, setPeriod] = useState<"week" | "month">("week");
+  const month = monthDraftCount !== undefined && period === "month";
+  const single = singleProp && !month;
+  const draftCount = month ? monthDraftCount : weekDraftCount;
   const [vocal, setVocal] = useState(true);
   const [instrument, setInstrument] = useState(true);
   const all = vocal && instrument;
@@ -27,6 +40,22 @@ export function AutoAssignOptions({ draftCount, single = false }: { draftCount: 
 
   return (
     <>
+      {monthDraftCount !== undefined && (
+        <div>
+          <div className="mb-2.5 text-sm font-bold text-ink-900">자동 배정 기간</div>
+          <div className="grid grid-cols-2 gap-2">
+            <ScopeBox label="이 주만" sub="지금 보는 주차" checked={period === "week"} onChange={() => setPeriod("week")} />
+            <ScopeBox
+              label="이 달 전체"
+              sub={`편성 중인 ${monthDraftCount}주 모두`}
+              checked={period === "month"}
+              onChange={() => setPeriod("month")}
+            />
+          </div>
+          <input type="hidden" name="period" value={period} />
+        </div>
+      )}
+
       <div>
         <div className="mb-2.5 text-sm font-bold text-ink-900">자동 배정 범위</div>
         <div className="grid grid-cols-3 gap-2">
@@ -79,7 +108,7 @@ export function AutoAssignOptions({ draftCount, single = false }: { draftCount: 
           </p>
         ) : (
           <ConfirmSubmitButton
-            confirmMessage={`${single ? "이 주" : `편성 중인 ${draftCount}주`}의 ${scopeLabel} 배정을 자동으로 새로 채울까요?\n\n그 파트는 직접 고친 배정도 다시 정해져요. 인도자, ${
+            confirmMessage={`${single ? "이 주" : `${month ? "이 달 " : ""}편성 중인 ${draftCount}주`}의 ${scopeLabel} 배정을 자동으로 새로 채울까요?\n\n그 파트는 직접 고친 배정도 다시 정해져요. 인도자, ${
               all ? "" : "고르지 않은 파트, "
             }확정된 주와 게스트는 그대로예요.`}
             pendingText="배정 중…"
@@ -87,7 +116,8 @@ export function AutoAssignOptions({ draftCount, single = false }: { draftCount: 
           >
             <SparklesIcon size={18} />
             {single ? "이 주 " : ""}
-            {all ? (single ? "자동 배정하기" : "스마트 자동 배정 실행하기") : `${vocal ? "보컬" : "악기"} 자동 배정${single ? "하기" : " 실행하기"}`}
+            {month ? "이 달 전체 " : ""}
+            {all ? (single || month ? "자동 배정하기" : "스마트 자동 배정 실행하기") : `${vocal ? "보컬" : "악기"} 자동 배정${single || month ? "하기" : " 실행하기"}`}
           </ConfirmSubmitButton>
         )
       ) : (
