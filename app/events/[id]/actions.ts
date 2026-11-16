@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireMember } from "@/lib/auth";
 import { query, queryOne, transaction } from "@/lib/db";
+import { importChart, parseKey, transposeChart, transposeKeyText } from "@/lib/chords";
 import { canEditSetlist, MAX_SHEET_BYTES, SHEET_TYPES } from "@/lib/setlist";
 import { fetchYoutubeTitle, youtubeId, youtubeWatchUrl } from "@/lib/youtube";
 
@@ -30,6 +31,12 @@ const clean = (v: FormDataEntryValue | null | undefined, max: number) =>
 const multiline = (v: FormDataEntryValue | null | undefined, max: number) =>
   String(v ?? "").replace(/\r\n?/g, "\n").trim().slice(0, max) || null;
 
+/** 코드 악보는 띄어쓰기가 자리 맞춤이라 줄 안의 공백을 그대로 둔다 */
+const MAX_CHART_CHARS = 20000;
+function chart(v: FormDataEntryValue | null | undefined): string | null {
+  return importChart(String(v ?? "").slice(0, MAX_CHART_CHARS)).chart || null;
+}
+
 /** 콘티 작성 폼의 곡 칸들. 칸마다 같은 이름의 입력이 있어서 getAll 순서가 곧 칸 순서다 */
 function parseSongRows(formData: FormData) {
   const titles = formData.getAll("title");
@@ -40,6 +47,7 @@ function parseSongRows(formData: FormData) {
     sheet_url: clean(formData.getAll("sheet_url")[i], 500),
     song_form: clean(formData.getAll("song_form")[i], 200),
     memo: multiline(formData.getAll("memo")[i], 1000),
+    chord_chart: chart(formData.getAll("chord_chart")[i]),
   }));
 }
 
@@ -96,9 +104,9 @@ export async function addSongs(formData: FormData) {
     let position = Number(max[0]?.next ?? 0);
     for (const s of songs) {
       await tx.query(
-        `insert into setlist_songs (event_id, position, title, youtube_url, song_key, sheet_url, song_form, memo)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [eventId, position++, s.title, s.youtube_url, s.song_key, s.sheet_url, s.song_form, s.memo],
+        `insert into setlist_songs (event_id, position, title, youtube_url, song_key, sheet_url, song_form, memo, chord_chart)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [eventId, position++, s.title, s.youtube_url, s.song_key, s.sheet_url, s.song_form, s.memo, s.chord_chart],
       );
     }
   });
@@ -115,7 +123,7 @@ export async function updateSong(formData: FormData) {
   if (!title && ytId) title = await fetchYoutubeTitle(ytId);
   if (!title) back(eventId, "?error=title");
   await query(
-    `update setlist_songs set title = $2, youtube_url = $3, song_key = $4, sheet_url = $5, song_form = $6, memo = $7 where id = $1`,
+    `update setlist_songs set title = $2, youtube_url = $3, song_key = $4, sheet_url = $5, song_form = $6, memo = $7, chord_chart = $8 where id = $1`,
     [
       songId,
       title,
@@ -124,8 +132,36 @@ export async function updateSong(formData: FormData) {
       link(formData, "sheet_url"),
       text(formData, "song_form", 200),
       multiline(formData.get("memo"), 1000),
+      chart(formData.get("chord_chart")),
     ],
   );
+  revalidatePath(`/events/${eventId}`);
+  back(eventId, `#song-${songId}`);
+}
+
+/** 화면에서 바꿔 본 키를 이 곡의 키로 저장한다: 코드 악보와 키 칸을 함께 옮긴다 */
+export async function transposeSong(formData: FormData) {
+  const songId = String(formData.get("song_id"));
+  const steps = Math.trunc(Number(formData.get("steps")));
+  const eventId = await eventOfSong(songId);
+  await requireEditor(eventId);
+  if (Number.isFinite(steps) && steps % 12 !== 0) {
+    await transaction(async (tx) => {
+      const { rows } = await tx.query<{ song_key: string | null; chord_chart: string | null }>(
+        `select song_key, chord_chart from setlist_songs where id = $1 for update`,
+        [songId],
+      );
+      const song = rows[0];
+      if (!song) return;
+      const base = parseKey(song.song_key) ?? (song.chord_chart ? parseKey(importChart(song.chord_chart).key) : null);
+      const target = base ? { root: (((base.root + steps) % 12) + 12) % 12, minor: base.minor } : null;
+      await tx.query(`update setlist_songs set song_key = $2, chord_chart = $3 where id = $1`, [
+        songId,
+        song.song_key ? transposeKeyText(song.song_key, steps).slice(0, 20) : null,
+        song.chord_chart ? transposeChart(song.chord_chart, steps, { targetKey: target }) : null,
+      ]);
+    });
+  }
   revalidatePath(`/events/${eventId}`);
   back(eventId, `#song-${songId}`);
 }

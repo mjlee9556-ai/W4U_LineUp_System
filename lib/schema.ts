@@ -114,6 +114,8 @@ create index if not exists setlist_songs_event_idx on setlist_songs (event_id, p
 -- 곡마다 송폼(예: I V1 C V2 C B C)과 인도자 메모
 alter table setlist_songs add column if not exists song_form text;
 alter table setlist_songs add column if not exists memo text;
+-- 붙여 넣은 코드 악보(텍스트). 화면에서 키를 바꿔(이조) 볼 수 있다
+alter table setlist_songs add column if not exists chord_chart text;
 
 -- 곡에 올린 악보 파일 (사진·PDF). 따로 저장소 없이 DB에 둔다
 create table if not exists sheet_files (

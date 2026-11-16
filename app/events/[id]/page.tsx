@@ -18,7 +18,8 @@ import { SheetUpload } from "@/components/SheetUpload";
 import { SetlistDraft } from "@/components/SetlistDraft";
 import { SongFields } from "@/components/SongFields";
 import { SubmitButton } from "@/components/SubmitButton";
-import { addSongs, deleteSheet, deleteSong, moveSong, updateSong, uploadSheet } from "./actions";
+import { ChordChart } from "@/components/ChordChart";
+import { addSongs, deleteSheet, deleteSong, moveSong, transposeSong, updateSong, uploadSheet } from "./actions";
 
 const ERRORS: Record<string, string> = {
   title: "곡 제목을 입력해 주세요. (유튜브 제목을 가져오지 못했을 때는 직접 적어 주세요)",
@@ -214,6 +215,16 @@ export default async function EventPage({
                     )}
                   </div>
                 </div>
+
+                {song.chord_chart && (
+                  <ChordChart
+                    key={`${song.song_key ?? ""}|${song.chord_chart}`}
+                    songId={song.id}
+                    chart={song.chord_chart}
+                    songKey={song.song_key}
+                    saveAction={canEdit ? transposeSong : undefined}
+                  />
+                )}
 
                 {canEdit && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-100 pt-3">
