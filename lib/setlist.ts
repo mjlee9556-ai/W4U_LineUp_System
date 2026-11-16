@@ -14,6 +14,7 @@ export type SetlistSong = {
   sheet_url: string | null;
   song_form: string | null;
   memo: string | null;
+  chord_chart: string | null;
   files: SheetFile[];
 };
 
@@ -37,7 +38,7 @@ export async function getSetlists(eventIds: string[]): Promise<Map<string, Setli
   const result = new Map<string, SetlistSong[]>();
   if (!eventIds.length) return result;
   const songs = await query<Omit<SetlistSong, "files">>(
-    `select id, event_id, position, title, youtube_url, song_key, sheet_url, song_form, memo
+    `select id, event_id, position, title, youtube_url, song_key, sheet_url, song_form, memo, chord_chart
        from setlist_songs where event_id = any($1::uuid[]) order by position, created_at`,
     [eventIds],
   );

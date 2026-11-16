@@ -46,7 +46,7 @@ export function SetlistDraft({
         + 칸 추가
       </button>
       <p className="text-xs text-stone-500">
-        비워 둔 칸은 저장하지 않아요. 악보 사진·PDF는 곡을 추가한 뒤 &apos;악보 올리기&apos;로 붙일 수 있어요 (파일 하나 4MB까지).
+        비워 둔 칸은 저장하지 않아요. 코드 악보는 텍스트로 붙여 넣으면 화면에서 키를 바꿔 볼 수 있어요. 악보 사진·PDF는 곡을 추가한 뒤 &apos;악보 올리기&apos;로 붙일 수 있어요 (파일 하나 4MB까지).
       </p>
       <SubmitButton pendingText="저장 중…">
         콘티에 추가
