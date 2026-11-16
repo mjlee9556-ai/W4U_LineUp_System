@@ -163,9 +163,4 @@ update members set role = 'owner'
 delete from member_sessions where session in ('sound', 'media');
 update availabilities set sessions = array_remove(array_remove(sessions, 'sound'), 'media')
  where sessions && array['sound', 'media'];
-
--- 생년월일·거주지는 더 이상 받지 않는다. 이미 가입한 회원의 값도 컬럼째 지운다 (되돌릴 수 없음)
-alter table members drop column if exists birth_date;
-alter table members drop column if exists district;
-alter table members drop column if exists dong;
 `;
