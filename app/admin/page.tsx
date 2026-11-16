@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { addDays, formatMonth, formatShort, shiftMonth, todayKST } from "@/lib/dates";
 import { SESSION_LABELS, type Session } from "@/lib/sessions";
-import { canApproveSignups, EVENT_TYPE_LABELS, formatAddress, roleLabel, type LineupEvent, type Member, type Round } from "@/lib/types";
+import { canApproveSignups, EVENT_TYPE_LABELS, roleLabel, type LineupEvent, type Member, type Round } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -42,7 +42,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   const [pending, codes, rounds, specials, [{ count: approvedCount }]] = await Promise.all([
     query<Member & { sessions: Session[] }>(
-      `select m.id, m.name, m.district, m.dong, m.created_at,
+      `select m.id, m.name, m.created_at,
               coalesce(array(select session from member_sessions s where s.member_id = m.id), '{}') as sessions
          from members m where m.status = 'pending' order by m.created_at`,
     ),
@@ -241,7 +241,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                     <div className="font-bold text-ink-900">{m.name}</div>
                     <div className="truncate text-xs text-stone-500">
                       {m.sessions.map((s) => SESSION_LABELS[s]).join(", ")}
-                      {formatAddress(m) && ` · ${formatAddress(m)}`}
                     </div>
                   </div>
                   {approver && (

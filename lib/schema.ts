@@ -5,10 +5,10 @@ create table if not exists members (
   name text not null,
   phone text not null unique,          -- 숫자만 저장 (로그인 아이디)
   pin_hash text not null,
-  birth_date date,
+  birth_date date,                     -- 더 이상 받지 않음. 항상 비어 있다
   email text,
-  district text,
-  dong text,
+  district text,                       -- 더 이상 받지 않음. 항상 비어 있다
+  dong text,                           -- 더 이상 받지 않음. 항상 비어 있다
   role text not null default 'member' check (role in ('member', 'admin')),
   status text not null default 'pending' check (status in ('pending', 'approved', 'inactive')),
   privacy_agreed_at timestamptz,
@@ -168,4 +168,9 @@ update members set role = 'owner'
 delete from member_sessions where session in ('sound', 'media');
 update availabilities set sessions = array_remove(array_remove(sessions, 'sound'), 'media')
  where sessions && array['sound', 'media'];
+
+-- 생년월일·거주지는 더 이상 받지 않는다. 이미 가입한 회원의 값도 지운다 (되돌릴 수 없음).
+-- 컬럼은 남겨 두어, 배포가 바뀌는 사이 예전 코드가 돌아도 오류가 나지 않게 한다.
+update members set birth_date = null, district = null, dong = null
+ where birth_date is not null or district is not null or dong is not null;
 `;

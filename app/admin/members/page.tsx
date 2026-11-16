@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
 import { formatPhone, PIN_PATTERN } from "@/lib/pin";
 import { SESSION_LABELS, type Session } from "@/lib/sessions";
-import { ADMIN_TITLES, formatAddress, isAdmin, isOwner, roleLabel, type Member } from "@/lib/types";
+import { ADMIN_TITLES, isAdmin, isOwner, roleLabel, type Member } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
@@ -12,7 +12,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { PhoneInput } from "@/components/PhoneInput";
 import { RoleChip } from "@/components/RoleChip";
 import { SubmitButton } from "@/components/SubmitButton";
-import { ArrowLeftIcon, HelpIcon, LockIcon, MapPinIcon, PencilIcon, SearchIcon, ShieldCheckIcon, UserPlusIcon } from "@/components/icons";
+import { ArrowLeftIcon, HelpIcon, LockIcon, PencilIcon, SearchIcon, ShieldCheckIcon, UserPlusIcon } from "@/components/icons";
 import { deleteMember, resetPin, setMemberStatus, setMemberTitle, updateMemberCredentials } from "../actions";
 
 const STATUS = {
@@ -63,7 +63,7 @@ export default async function MembersPage({
 
   const [members, invite] = await Promise.all([
     query<Row>(
-      `select m.id, m.name, m.phone, m.district, m.dong, m.role, m.admin_title, m.status, m.birth_date, m.email,
+      `select m.id, m.name, m.phone, m.role, m.admin_title, m.status, m.email,
               coalesce(array(select session from member_sessions s where s.member_id = m.id), '{}') as sessions
          from members m
         order by m.status, case m.role when 'owner' then 0 when 'admin' then 1 else 2 end, m.name`,
@@ -89,7 +89,7 @@ export default async function MembersPage({
     if (filter === "member" && m.role !== "member") return false;
     if (filter === "inactive" && m.status !== "inactive") return false;
     if (!needle) return true;
-    const hay = [m.name, m.phone, formatAddress(m), ...m.sessions.map((s) => SESSION_LABELS[s])].join(" ").toLowerCase();
+    const hay = [m.name, m.phone, ...m.sessions.map((s) => SESSION_LABELS[s])].join(" ").toLowerCase();
     return hay.includes(needle);
   });
   const filterHref = (key: FilterKey) => {
@@ -145,7 +145,7 @@ export default async function MembersPage({
             name="q"
             defaultValue={q}
             type="search"
-            placeholder="팀원 이름, 악기 세션, 거주지 검색"
+            placeholder="팀원 이름, 악기 세션 검색"
             aria-label="팀원 검색"
             className="h-12 w-full rounded-xl border border-stone-200 bg-white pl-10 pr-4 text-[14px] text-stone-900 placeholder:text-stone-400 focus:border-ink-900 focus:ring-2 focus:ring-ink-900/10 focus:outline-none"
           />
@@ -235,13 +235,6 @@ export default async function MembersPage({
                     </span>
                   )}
                 </div>
-
-                {formatAddress(m) && (
-                  <p className="mt-3 flex items-center gap-1.5 rounded-xl bg-stone-50 px-3 py-2 text-[13px] text-stone-600">
-                    <MapPinIcon size={14} className="shrink-0 text-stone-400" />
-                    {formatAddress(m)}
-                  </p>
-                )}
 
                 {owner && (
                   <>

@@ -37,7 +37,7 @@ export async function endSession() {
   store.delete(SESSION_COOKIE);
 }
 
-const MEMBER_COLUMNS = `m.id, m.name, m.phone, m.birth_date, m.email, m.district, m.dong, m.role, m.admin_title, m.status, m.created_at`;
+const MEMBER_COLUMNS = `m.id, m.name, m.phone, m.email, m.role, m.admin_title, m.status, m.created_at`;
 
 /** 로그인한 팀원. 없으면 member가 null */
 export async function getCurrentMember() {

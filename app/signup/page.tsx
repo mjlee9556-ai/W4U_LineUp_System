@@ -13,8 +13,6 @@ import {
   ChurchIcon,
   IdCardIcon,
   ListMusicIcon,
-  MapPinIcon,
-  ShieldAlertIcon,
   ShieldCheckIcon,
   UserIcon,
 } from "@/components/icons";
@@ -131,30 +129,9 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
             aside={<span className="shrink-0 text-xs text-stone-400">필수 및 선택</span>}
           >
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="min-w-0">
-                  <label className="field-label" htmlFor="birth_date">생년월일<Req /></label>
-                  <input id="birth_date" name="birth_date" type="date" required className="field px-3" />
-                </div>
-                <div className="min-w-0">
-                  <label className="field-label" htmlFor="email">이메일 <span className="font-normal text-stone-500">(선택)</span></label>
-                  <input id="email" name="email" type="email" placeholder="example@email.com" className="field px-3" />
-                </div>
-              </div>
-
               <div>
-                <div className="flex items-baseline justify-between">
-                  <label className="field-label" htmlFor="address">거주지 (시·구·동까지)<Req /></label>
-                  <span className="text-xs text-stone-500">카풀 배려 참고용</span>
-                </div>
-                <div className="relative">
-                  <MapPinIcon size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
-                  <input id="address" name="address" required maxLength={40} placeholder="예: 수원시 장안구 조원동" className="field pl-10" />
-                </div>
-                <p className="mt-2 flex items-center gap-1 text-xs font-medium text-stone-700">
-                  <ShieldAlertIcon size={14} className="text-accent-600" />
-                  번지나 아파트 이름 같은 상세 주소는 적지 않아요.
-                </p>
+                <label className="field-label" htmlFor="email">이메일 <span className="font-normal text-stone-500">(선택)</span></label>
+                <input id="email" name="email" type="email" placeholder="example@email.com" className="field px-3" />
               </div>
 
               <div>
@@ -177,9 +154,9 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
                 <ShieldCheckIcon size={15} className="text-accent-600" />
                 개인정보 수집 및 사역 공유 동의 <span className="text-accent-600">(필수)</span>
               </span>
-              라인업 편성과 연락을 위해 이름, 세션, 생년월일, 전화번호, 이메일(선택), 거주지(시·구·동)를 수집합니다.{" "}
+              라인업 편성과 연락을 위해 이름, 세션, 전화번호, 이메일(선택)을 수집합니다.{" "}
               <strong className="font-semibold text-stone-900">
-                연락처와 생년월일은 본인과 관리자만 볼 수 있고, 다른 팀원에게는 이름과 세션만 보입니다.
+                연락처는 본인과 관리자만 볼 수 있고, 다른 팀원에게는 이름과 세션만 보입니다.
               </strong>{" "}
               탈퇴하거나 활동을 마치면 즉시 파기 및 삭제합니다. 이에 동의합니다.
             </span>

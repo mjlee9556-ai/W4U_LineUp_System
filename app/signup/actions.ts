@@ -14,7 +14,6 @@ export async function register(formData: FormData) {
   const sessions = formData.getAll("sessions").map(String).filter(isSession).filter((s) => s !== "sub_leader");
   const phone = normalizePhone(get("phone"));
   const pin = get("pin");
-  const address = get("address").replace(/\s+/g, " ");
   const inviteCode = get("invite_code").toUpperCase();
 
   const fail = (reason: string) => redirect(`/signup?error=${encodeURIComponent(reason)}`);
@@ -24,7 +23,6 @@ export async function register(formData: FormData) {
   if (!isValidPin(pin)) fail("PIN은 숫자 4~6자리로 정해 주세요.");
   if (pin !== get("pin_confirm")) fail("PIN 확인이 맞지 않아요.");
   if (sessions.length === 0) fail("세션을 하나 이상 골라 주세요.");
-  if (!address || address.length > 40) fail("거주지를 시·구·동까지만 입력해 주세요. (예: 수원시 장안구 조원동)");
   if (formData.get("privacy") !== "on") fail("개인정보 수집에 동의해야 가입할 수 있어요.");
 
   let memberId: string;
@@ -51,9 +49,9 @@ export async function register(formData: FormData) {
       }
 
       const { rows } = await tx.query<{ id: string }>(
-        `insert into members (name, phone, pin_hash, birth_date, email, district, dong, role, status, privacy_agreed_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now()) returning id`,
-        [get("name"), phone, hashPin(pin), get("birth_date") || null, get("email") || null, address, null, isFirst ? "owner" : "member", status],
+        `insert into members (name, phone, pin_hash, email, role, status, privacy_agreed_at)
+         values ($1, $2, $3, $4, $5, $6, now()) returning id`,
+        [get("name"), phone, hashPin(pin), get("email") || null, isFirst ? "owner" : "member", status],
       );
       for (const s of sessions) {
         await tx.query(`insert into member_sessions (member_id, session) values ($1, $2) on conflict do nothing`, [rows[0].id, s]);

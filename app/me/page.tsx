@@ -6,7 +6,7 @@ import { practiceDates } from "@/lib/lineup";
 import { formatPhone, PIN_PATTERN } from "@/lib/pin";
 import { withDays } from "@/lib/queries";
 import { SESSION_LABELS, SIGNUP_SESSIONS, type Session } from "@/lib/sessions";
-import { formatAddress, type LineupEvent, isAdmin, roleLabel } from "@/lib/types";
+import { type LineupEvent, isAdmin, roleLabel } from "@/lib/types";
 import { getLineup, mainDate } from "@/lib/week";
 import { AppShell } from "@/components/AppShell";
 import { Notice } from "@/components/Notice";
@@ -20,7 +20,6 @@ import {
   FileIcon,
   LockIcon,
   LogOutIcon,
-  MapPinIcon,
   PencilIcon,
   SendIcon,
   SettingsIcon,
@@ -36,7 +35,6 @@ const SAVED: Record<string, string> = {
 const ERRORS: Record<string, string> = {
   current: "지금 PIN이 맞지 않아요.",
   new: "새 PIN은 숫자 4~6자리로, 확인과 똑같이 입력해 주세요.",
-  address: "거주지를 시·구·동까지만 입력해 주세요. (예: 수원시 장안구 조원동)",
   sessions: "세션을 하나 이상 골라 주세요.",
 };
 
@@ -155,21 +153,6 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
         <Notice message={saved === "profile" ? SAVED.profile : undefined} />
         <Notice tone="error" message={error && !pinError ? ERRORS[error] : undefined} />
         <form action={updateProfile} className="space-y-4">
-          <div>
-            <label className="field-label" htmlFor="address">거주지 (시·구·동까지)</label>
-            <div className="relative">
-              <MapPinIcon size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
-              <input
-                id="address"
-                name="address"
-                required
-                maxLength={40}
-                defaultValue={formatAddress(member)}
-                placeholder="예: 수원시 장안구 조원동"
-                className="field pl-10"
-              />
-            </div>
-          </div>
           <fieldset className="relative">
             <legend className="field-label">기본 세션</legend>
             <div className="relative pt-1 [&>span:first-child]:-top-7 [&>span:first-child]:right-0">
