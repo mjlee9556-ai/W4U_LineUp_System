@@ -28,6 +28,7 @@ import {
   SlidersIcon,
   SparklesIcon,
   StarIcon,
+  TableIcon,
   TrashIcon,
   UsersIcon,
 } from "@/components/icons";
@@ -177,6 +178,15 @@ export default async function LineupPage({
           }
         />
         {board}
+        {isAdmin && (
+          <Link
+            href={`/lineup/board?month=${month}`}
+            className="mt-3 flex h-11 items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-sm font-bold text-ink-900 hover:bg-stone-50"
+          >
+            <TableIcon size={16} />
+            월간 배정표에서 한눈에 배정하기
+          </Link>
+        )}
       </div>
 
       {isAdmin && (
