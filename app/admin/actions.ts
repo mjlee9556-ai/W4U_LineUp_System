@@ -577,3 +577,51 @@ export async function confirmRound(formData: FormData) {
   revalidatePath("/calendar");
   redirect(`/admin/rounds/${roundId}?saved=confirm`);
 }
+
+/**
+ * 월간 배정표에서 이름을 눌러 배정하거나 해제한다 (한 사람·한 세션씩).
+ * 확정된 주는 바꾸지 않는다. 화면이 바로 바뀌도록 redirect 대신 결과를 돌려준다.
+ */
+export async function toggleBoardAssignment(input: {
+  eventId: string;
+  memberId: string;
+  session: string;
+  assign: boolean;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { member } = await requireAdmin();
+  const { eventId, memberId, session, assign } = input;
+  if (!isSession(session) || !eventId || !memberId) return { ok: false, error: "잘못된 요청이에요." };
+  const event = await queryOne<{ lineup_status: string; round_id: string | null }>(
+    `select lineup_status, round_id from events where id = $1`,
+    [eventId],
+  );
+  if (!event) return { ok: false, error: "일정을 찾지 못했어요." };
+  if (event.lineup_status === "confirmed") return { ok: false, error: "확정된 주예요. 확정을 먼저 풀어 주세요." };
+
+  await transaction(async (tx) => {
+    if (assign) {
+      const satAbsent =
+        (
+          await tx.query(`select 1 from availabilities a where a.event_id = $1 and a.member_id = $2 and ${MISSES_PRACTICE_SQL}`, [
+            eventId,
+            memberId,
+          ])
+        ).rows.length > 0;
+      await tx.query(
+        `insert into lineup_assignments (event_id, member_id, session, sat_absent) values ($1, $2, $3, $4)
+         on conflict do nothing`,
+        [eventId, memberId, session, satAbsent],
+      );
+    } else {
+      await tx.query(`delete from lineup_assignments where event_id = $1 and member_id = $2 and session = $3`, [eventId, memberId, session]);
+    }
+    await recordPartSaves(tx, [eventId], [partOf(session)], member.id, "manual");
+  });
+
+  revalidatePath("/lineup");
+  revalidatePath("/lineup/board");
+  revalidatePath(`/admin/events/${eventId}`);
+  if (event.round_id) revalidatePath(`/admin/rounds/${event.round_id}`);
+  revalidatePath("/calendar");
+  return { ok: true };
+}

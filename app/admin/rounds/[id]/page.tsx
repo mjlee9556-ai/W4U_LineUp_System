@@ -239,6 +239,14 @@ export default async function RoundPage({
               <TableIcon size={18} />
               주차별 가용 세션 현황
             </h2>
+            <div className="flex shrink-0 items-center gap-3">
+            <Link
+              href={`/lineup/board?month=${round.target_month.slice(0, 7)}`}
+              className="flex shrink-0 items-center gap-0.5 text-xs font-semibold text-ink-900 hover:underline"
+            >
+              월간 배정표
+              <ChevronRightIcon size={14} />
+            </Link>
             <Link
               href={`/admin/rounds/${round.id}/practice`}
               className="flex shrink-0 items-center gap-0.5 text-xs font-semibold text-stone-500 hover:text-ink-900"
@@ -246,6 +254,7 @@ export default async function RoundPage({
               토 연습 설정
               <ChevronRightIcon size={14} />
             </Link>
+            </div>
           </div>
           <div className="-mx-4 overflow-x-auto px-4 pb-1">
             <table className="w-full min-w-[540px] border-collapse text-center text-[13px]">
